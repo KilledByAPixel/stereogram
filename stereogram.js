@@ -71,8 +71,7 @@ const noiseWrap = (X, Y, wrap) => {
 
 const DEFAULTS = {
     maxSeparationScale: 0.3,
-    textureScaleX: 4,
-    textureScaleY: 4,
+    textureScale: 4,
     repeatSize: 120,
     imageExtraDepth: 0,
     pixelate: 0,
@@ -97,8 +96,7 @@ const offContext = offCanvas.getContext('2d');
 function getParamsFromUI() {
     return {
         maxSeparationScale: parseFloat(depthSlider.value),
-        textureScaleX:      parseFloat(scaleXSlider.value),
-        textureScaleY:      parseFloat(scaleYSlider.value),
+        textureScale:       parseFloat(scaleSlider.value),
         repeatSize:         parseInt(repeatSlider.value),
         imageExtraDepth:    parseFloat(extraDepthSlider.value),
         pixelate:           pixelateCheck.checked ? 1 : 0,
@@ -218,7 +216,7 @@ function startRender() {
 }
 
 function renderScanline(y, w, h, params, drawSeed, pixels) {
-    const { maxSeparationScale, textureScaleX, textureScaleY,
+    const { maxSeparationScale, textureScale,
             repeatSize, imageExtraDepth, pixelate } = params;
     const maxSeparation = repeatSize * maxSeparationScale;
 
@@ -255,13 +253,13 @@ function renderScanline(y, w, h, params, drawSeed, pixels) {
     for (let i = 0; i < w; i++)
         A[i] = (A[i] + B[i]) / 2;
 
-    const p = repeatSize / textureScaleX;
+    const p = repeatSize / textureScale;
     for (let i = 0; i < w; i++) {
         let X = A[i];
-        let Y = y / textureScaleY;
+        let Y = y / textureScale;
 
         X = ((X % repeatSize) + repeatSize) % repeatSize;
-        X = X / textureScaleX;
+        X = X / textureScale;
         if (pixelate) { X |= 0; Y |= 0; }
 
         const o = drawSeed;
@@ -309,8 +307,7 @@ function setupSlider(sliderId, displayId, decimals = 2) {
 setupSlider('depthSlider', 'depthVal');
 setupSlider('repeatSlider', 'repeatVal', 0);
 setupSlider('extraDepthSlider', 'extraDepthVal');
-setupSlider('scaleXSlider', 'scaleXVal', 1);
-setupSlider('scaleYSlider', 'scaleYVal', 1);
+setupSlider('scaleSlider', 'scaleVal', 1);
 
 pixelateCheck.addEventListener('change', () => startRender());
 showHeightCheck.addEventListener('change', () => {
@@ -404,11 +401,8 @@ resetBtn.addEventListener('click', () => {
     extraDepthSlider.value = DEFAULTS.imageExtraDepth;
     extraDepthVal.textContent = DEFAULTS.imageExtraDepth.toFixed(2);
 
-    scaleXSlider.value = DEFAULTS.textureScaleX;
-    scaleXVal.textContent = DEFAULTS.textureScaleX.toFixed(1);
-
-    scaleYSlider.value = DEFAULTS.textureScaleY;
-    scaleYVal.textContent = DEFAULTS.textureScaleY.toFixed(1);
+    scaleSlider.value = DEFAULTS.textureScale;
+    scaleVal.textContent = DEFAULTS.textureScale.toFixed(1);
 
     pixelateCheck.checked = false;
     showHeightCheck.checked = false;
