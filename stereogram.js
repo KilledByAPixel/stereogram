@@ -71,7 +71,7 @@ const noiseWrap = (X, Y, wrap) => {
 
 const DEFAULTS = {
     maxSeparationScale: 0.3,
-    textureScale: 4,
+    textureScale: 6,
     repeatSize: 120,
     pixelate: 0,
     imageFilename: 'test1.png',
@@ -98,6 +98,7 @@ function getParamsFromUI() {
         textureScale:       parseFloat(scaleSlider.value),
         repeatSize:         parseInt(repeatSlider.value),
         pixelate:           pixelateCheck.checked ? 1 : 0,
+        invert:             invertCheck.checked ? 1 : 0,
     };
 }
 
@@ -212,14 +213,14 @@ function startRender() {
 
 function renderScanline(y, w, h, params, drawSeed, pixels) {
     const { maxSeparationScale, textureScale,
-            repeatSize, pixelate } = params;
+            repeatSize, pixelate, invert } = params;
     const maxSeparation = repeatSize * maxSeparationScale;
 
     const depth = new Float32Array(w);
     for (let i = 0; i < w; i++) {
         let d = getHeight(i, y);
         d = Number.isNaN(d) ? 0 : clamp(d);
-        depth[i] = d;
+        depth[i] = invert ? 1 - d : d;
     }
 
     const A = new Float32Array(w);
@@ -305,6 +306,7 @@ setupSlider('repeatSlider', 'repeatVal', 0);
 setupSlider('scaleSlider', 'scaleVal', 1);
 
 pixelateCheck.addEventListener('change', () => startRender());
+invertCheck.addEventListener('change', () => startRender());
 showHeightCheck.addEventListener('change', () => {
     depthCanvas.style.display = showHeightCheck.checked ? 'block' : 'none';
 });
@@ -318,8 +320,8 @@ function debouncedRender() {
 presetSelect.addEventListener('change', async () => {
     try {
         currentImage = await loadImage(presetSelect.value);
-        canvasW = 2000;
-        canvasH = Math.round(2000 * currentImage.height / currentImage.width);
+        canvasW = 1920;
+        canvasH = 1080;
         setupHeightData(currentImage);
         startRender();
     } catch (e) {
@@ -397,6 +399,7 @@ resetBtn.addEventListener('click', () => {
     scaleVal.textContent = DEFAULTS.textureScale.toFixed(1);
 
     pixelateCheck.checked = false;
+    invertCheck.checked = false;
     showHeightCheck.checked = false;
 
     presetSelect.value = DEFAULTS.imageFilename;
@@ -409,14 +412,14 @@ resetBtn.addEventListener('click', () => {
 async function startup() {
     try {
         currentImage = await loadImage(DEFAULTS.imageFilename);
-        canvasW = 2000;
-        canvasH = Math.round(2000 * currentImage.height / currentImage.width);
+        canvasW = 1920;
+        canvasH = 1080;
         setupHeightData(currentImage);
         startRender();
     } catch (e) {
         console.error('Failed to load default image:', e);
-        canvasW = 2000;
-        canvasH = 1000;
+        canvasW = 1920;
+        canvasH = 1080;
         heightData = new Float32Array(canvasW * canvasH);
         for (let y = 0; y < canvasH; y++)
             for (let x = 0; x < canvasW; x++) {
