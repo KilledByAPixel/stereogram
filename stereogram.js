@@ -76,7 +76,6 @@ const DEFAULTS = {
     repeatSize: 120,
     imageExtraDepth: 0,
     pixelate: 0,
-    showHeight: 0,
     imageFilename: 'test1.png',
 };
 
@@ -90,6 +89,8 @@ let canvasW = 0, canvasH = 0;
 
 const mainCanvas = document.getElementById('mainCanvas');
 const mainContext = mainCanvas.getContext('2d');
+const depthCanvas = document.getElementById('depthCanvas');
+const depthContext = depthCanvas.getContext('2d');
 const offCanvas = document.createElement('canvas');
 const offContext = offCanvas.getContext('2d');
 
@@ -101,7 +102,6 @@ function getParamsFromUI() {
         repeatSize:         parseInt(repeatSlider.value),
         imageExtraDepth:    parseFloat(extraDepthSlider.value),
         pixelate:           pixelateCheck.checked ? 1 : 0,
-        showHeight:         showHeightCheck.checked ? 1 : 0,
     };
 }
 
@@ -126,6 +126,27 @@ function setupHeightData(image) {
     heightData = new Float32Array(w * h);
     for (let i = 0; i < data.length; i += 4)
         heightData[i >> 2] = data[i] / 255;
+
+    depthCanvas.width = w;
+    depthCanvas.height = h;
+    depthContext.drawImage(offCanvas, 0, 0);
+}
+
+function updateDepthCanvas() {
+    const w = canvasW;
+    const h = canvasH;
+    depthCanvas.width = w;
+    depthCanvas.height = h;
+    const imgData = depthContext.createImageData(w, h);
+    const px = imgData.data;
+    for (let i = 0; i < heightData.length; i++) {
+        const v = heightData[i] * 255 | 0;
+        px[i * 4]     = v;
+        px[i * 4 + 1] = v;
+        px[i * 4 + 2] = v;
+        px[i * 4 + 3] = 255;
+    }
+    depthContext.putImageData(imgData, 0, 0);
 }
 
 function getHeight(x, y, imageExtraDepth) {
@@ -198,7 +219,7 @@ function startRender() {
 
 function renderScanline(y, w, h, params, drawSeed, pixels) {
     const { maxSeparationScale, textureScaleX, textureScaleY,
-            repeatSize, imageExtraDepth, pixelate, showHeight } = params;
+            repeatSize, imageExtraDepth, pixelate } = params;
     const maxSeparation = repeatSize * maxSeparationScale;
 
     const depth = new Float32Array(w);
@@ -251,14 +272,8 @@ function renderScanline(y, w, h, params, drawSeed, pixels) {
 
         const d = Math.hypot(i - w/2, y - h/2);
 
-        let r, g, b;
-        if (showHeight) {
-            const v = depth[i] * 255 | 0;
-            r = g = b = v;
-        } else {
-            const hue = Math.sin(n3) * 0.3 + d / (w * 2) + 0.5 + Math.sin(drawSeed);
-            [r, g, b] = hslToRgb(hue, n2, n);
-        }
+        const hue = Math.sin(n3) * 0.3 + d / (w * 2) + 0.5 + Math.sin(drawSeed);
+        const [r, g, b] = hslToRgb(hue, n2, n);
 
         const idx = (y * w + i) * 4;
         pixels[idx]     = r;
@@ -298,7 +313,9 @@ setupSlider('scaleXSlider', 'scaleXVal', 1);
 setupSlider('scaleYSlider', 'scaleYVal', 1);
 
 pixelateCheck.addEventListener('change', () => startRender());
-showHeightCheck.addEventListener('change', () => startRender());
+showHeightCheck.addEventListener('change', () => {
+    depthCanvas.style.display = showHeightCheck.checked ? 'block' : 'none';
+});
 
 let debounceTimer = null;
 function debouncedRender() {
@@ -420,6 +437,7 @@ async function startup() {
                 const d = ((canvasH*0.45)**2 - (x-canvasW/2)**2 - (y-canvasH/2)**2)**0.5 / (canvasH*0.45);
                 heightData[x + y * canvasW] = d > 0 ? d : 0;
             }
+        updateDepthCanvas();
         startRender();
     }
 }

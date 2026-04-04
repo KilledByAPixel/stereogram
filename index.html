@@ -129,11 +129,15 @@ button:hover { background: #3a4a5a; }
     align-items: center;
     justify-content: center;
 }
-#mainCanvas {
+#mainCanvas, #depthCanvas {
     max-width: 100%;
     max-height: calc(100vh - 80px);
     box-shadow: 0 0 40px 10px #000;
     object-fit: contain;
+}
+#depthCanvas {
+    position: absolute;
+    display: none;
 }
 .drop-overlay {
     position: absolute;
@@ -251,6 +255,7 @@ button:hover { background: #3a4a5a; }
     <div class="canvas-area" id="canvasArea">
         <div class="canvas-wrapper">
             <canvas id="mainCanvas"></canvas>
+            <canvas id="depthCanvas"></canvas>
             <div class="drop-overlay" id="dropOverlay">Drop depth map image here</div>
         </div>
         <div class="progress-bar"><div class="fill" id="progressFill"></div></div>
