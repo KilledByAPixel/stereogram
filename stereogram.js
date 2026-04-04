@@ -248,13 +248,14 @@ function renderScanline(y, w, h, params, drawSeed, pixels) {
     for (let i = 0; i < w; i++)
         A[i] = (A[i] + B[i]) / 2;
 
-    const p = repeatSize / textureScale;
+    const p = Math.max(1, Math.round(repeatSize / textureScale));
+    const scale = repeatSize / p;
     for (let i = 0; i < w; i++) {
         let X = A[i];
-        let Y = y / textureScale;
+        let Y = y / scale;
 
         X = ((X % repeatSize) + repeatSize) % repeatSize;
-        X = X / textureScale;
+        X = X / scale;
         if (pixelate) { X |= 0; Y |= 0; }
 
         const o = drawSeed;
