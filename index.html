@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset=utf-8>
+<title>Stereogram Generator</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: system-ui, -apple-system, sans-serif; background: #1a1a1a; color: #ccc; }
+
+.app {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 280px;
+    min-width: 280px;
+    background: #242424;
+    border-right: 1px solid #333;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.sidebar h1 {
+    font-size: 16px;
+    color: #eee;
+    margin-bottom: 4px;
+}
+.sidebar h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #888;
+    margin-top: 8px;
+}
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.control-group label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    color: #bbb;
+}
+.control-group label span.value {
+    font-family: monospace;
+    font-size: 12px;
+    color: #999;
+    min-width: 40px;
+    text-align: right;
+}
+.control-group input[type="range"] {
+    width: 100%;
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #444;
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+}
+.control-group input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #7af;
+    cursor: pointer;
+}
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #bbb;
+    cursor: pointer;
+}
+.checkbox-group input { cursor: pointer; }
+
+select, button {
+    width: 100%;
+    padding: 8px 10px;
+    background: #333;
+    color: #ccc;
+    border: 1px solid #555;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+}
+select:hover, button:hover { border-color: #7af; }
+button { background: #2a3a4a; }
+button:hover { background: #3a4a5a; }
+
+.file-input-wrapper {
+    position: relative;
+}
+.file-input-wrapper input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.separator { border-top: 1px solid #333; margin: 4px 0; }
+
+/* Canvas area */
+.canvas-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    padding: 20px;
+}
+.canvas-wrapper {
+    position: relative;
+    max-width: 100%;
+    max-height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+#mainCanvas {
+    max-width: 100%;
+    max-height: calc(100vh - 80px);
+    box-shadow: 0 0 40px 10px #000;
+    object-fit: contain;
+}
+.drop-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(100, 170, 255, 0.15);
+    border: 3px dashed #7af;
+    border-radius: 8px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: #7af;
+    pointer-events: none;
+    z-index: 10;
+}
+.drop-overlay.active { display: flex; }
+
+.progress-bar {
+    width: 100%;
+    max-width: 600px;
+    height: 4px;
+    background: #333;
+    border-radius: 2px;
+    margin-top: 12px;
+    overflow: hidden;
+}
+.progress-bar .fill {
+    height: 100%;
+    background: #7af;
+    width: 0%;
+    transition: width 0.1s;
+}
+.progress-text {
+    font-size: 12px;
+    color: #666;
+    margin-top: 4px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .app { flex-direction: column; }
+    .sidebar {
+        width: 100%;
+        min-width: unset;
+        max-height: 40vh;
+        border-right: none;
+        border-bottom: 1px solid #333;
+    }
+}
+</style>
+</head>
+<body>
+<div class="app">
+    <div class="sidebar">
+        <h1>Stereogram Generator</h1>
+
+        <h2>Image</h2>
+        <div class="control-group">
+            <label>Preset</label>
+            <select id="presetSelect">
+                <option value="test.png">test.png</option>
+                <option value="test2.png">test2.png</option>
+                <option value="test3.png">test3.png</option>
+                <option value="test4.png">test4.png</option>
+                <option value="test5.png" selected>test5.png</option>
+                <option value="test6.png">test6.png</option>
+            </select>
+        </div>
+        <div class="control-group file-input-wrapper">
+            <button id="fileBtn">Upload Image...</button>
+            <input type="file" id="fileInput" accept="image/*">
+        </div>
+
+        <div class="separator"></div>
+        <h2>Stereogram</h2>
+
+        <div class="control-group">
+            <label>Depth Intensity <span class="value" id="depthVal">0.30</span></label>
+            <input type="range" id="depthSlider" min="0" max="1" step="0.01" value="0.3">
+        </div>
+        <div class="control-group">
+            <label>Repeat Size <span class="value" id="repeatVal">120</span></label>
+            <input type="range" id="repeatSlider" min="40" max="300" step="1" value="120">
+        </div>
+        <div class="control-group">
+            <label>Extra Depth <span class="value" id="extraDepthVal">0.00</span></label>
+            <input type="range" id="extraDepthSlider" min="0" max="1" step="0.01" value="0">
+        </div>
+
+        <div class="separator"></div>
+        <h2>Pattern</h2>
+
+        <div class="control-group">
+            <label>Texture Scale X <span class="value" id="scaleXVal">4.0</span></label>
+            <input type="range" id="scaleXSlider" min="1" max="20" step="0.5" value="4">
+        </div>
+        <div class="control-group">
+            <label>Texture Scale Y <span class="value" id="scaleYVal">4.0</span></label>
+            <input type="range" id="scaleYSlider" min="1" max="20" step="0.5" value="4">
+        </div>
+        <label class="checkbox-group">
+            <input type="checkbox" id="pixelateCheck"> Pixelate
+        </label>
+
+        <div class="separator"></div>
+        <h2>View</h2>
+        <label class="checkbox-group">
+            <input type="checkbox" id="showHeightCheck"> Show Depth Map
+        </label>
+
+        <div class="separator"></div>
+        <h2>Actions</h2>
+        <button id="regenerateBtn">Regenerate</button>
+        <button id="saveBtn">Save Image</button>
+        <button id="resetBtn">Reset Defaults</button>
+    </div>
+
+    <div class="canvas-area" id="canvasArea">
+        <div class="canvas-wrapper">
+            <canvas id="mainCanvas"></canvas>
+            <div class="drop-overlay" id="dropOverlay">Drop depth map image here</div>
+        </div>
+        <div class="progress-bar"><div class="fill" id="progressFill"></div></div>
+        <div class="progress-text" id="progressText"></div>
+    </div>
+</div>
+
+<script>
+'use strict';
+
+///////////////////////////////////////////////////////////////////////////////
+// MATH UTILITIES
+
+const PI      = Math.PI;
+const abs     = (a) => a < 0 ? -a : a;
+const mod     = (a, b=1) => ((a % b) + b) % b;
+const clamp   = (v, min=0, max=1) => v < min ? min : v > max ? max : v;
+const lerp    = (p, min=0, max=1) => min + clamp(p) * (max-min);
+const smoothStep = (p) => p * p * (3 - 2 * p);
+
+///////////////////////////////////////////////////////////////////////////////
+// SEEDED RANDOM GENERATOR
+
+class Random {
+    constructor(seed) { this.seed = seed|0; }
+    float(a=1, b=0) {
+        this.seed ^= this.seed << 13;
+        this.seed ^= this.seed >>> 17;
+        this.seed ^= this.seed << 5;
+        return b + (a-b) * Math.abs(this.seed % 1e7) / 1e7;
+    }
+    int(a=1, b=0) { return this.float(a, b)|0; }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// HSL TO RGB CONVERSION
+
+function hslToRgb(h, s, l) {
+    h = mod(h); s = clamp(s); l = clamp(l);
+    if (s === 0) {
+        const v = l * 255 | 0;
+        return [v, v, v];
+    }
+    const hue2rgb = (p, q, t) => {
+        if (t < 0) t += 1;
+        if (t > 1) t -= 1;
+        if (t < 1/6) return p + (q - p) * 6 * t;
+        if (t < 1/2) return q;
+        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+        return p;
+    };
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    return [
+        hue2rgb(p, q, h + 1/3) * 255 | 0,
+        hue2rgb(p, q, h)       * 255 | 0,
+        hue2rgb(p, q, h - 1/3) * 255 | 0,
+    ];
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// NOISE FUNCTION
+
+const noiseWrap = (X, Y, wrap) => {
+    const hash = (x, y) => {
+        x = mod(x + 1e3, wrap);
+        x = x | 0;
+        y = y | 0;
+        return abs(Math.sin(y*y%17371+123^x*x%13331+321)*3e4) % 1;
+    };
+    const XP = smoothStep(mod(X));
+    const YP = smoothStep(mod(Y));
+    const noise1 = (X, Y) => (1-XP)*hash(X,Y) + XP*hash(X+1,Y);
+    return (1-YP)*noise1(X,Y) + YP*noise1(X,Y+1);
+};
+
+///////////////////////////////////////////////////////////////////////////////
+// DEFAULT PARAMETERS
+
+const DEFAULTS = {
+    maxSeparationScale: 0.3,
+    textureScaleX: 4,
+    textureScaleY: 4,
+    repeatSize: 120,
+    imageExtraDepth: 0,
+    pixelate: 0,
+    showHeight: 0,
+    imageFilename: 'test5.png',
+};
+
+///////////////////////////////////////////////////////////////////////////////
+// RENDERER
+
+let renderState = null;
+let currentImage = null;
+let heightData = null;
+let canvasW = 0, canvasH = 0;
+
+const mainCanvas = document.getElementById('mainCanvas');
+const mainContext = mainCanvas.getContext('2d');
+const offCanvas = document.createElement('canvas');
+const offContext = offCanvas.getContext('2d');
+
+function getParamsFromUI() {
+    return {
+        maxSeparationScale: parseFloat(depthSlider.value),
+        textureScaleX:      parseFloat(scaleXSlider.value),
+        textureScaleY:      parseFloat(scaleYSlider.value),
+        repeatSize:         parseInt(repeatSlider.value),
+        imageExtraDepth:    parseFloat(extraDepthSlider.value),
+        pixelate:           pixelateCheck.checked ? 1 : 0,
+        showHeight:         showHeightCheck.checked ? 1 : 0,
+    };
+}
+
+function loadImage(src) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('Failed to load image: ' + src));
+        img.src = src;
+    });
+}
+
+function setupHeightData(image) {
+    const w = canvasW;
+    const h = canvasH;
+
+    offCanvas.width = w;
+    offCanvas.height = h;
+    offContext.drawImage(image, 0, 0, image.width, image.height, 0, 0, w, h);
+    const data = offContext.getImageData(0, 0, w, h).data;
+
+    heightData = new Float32Array(w * h);
+    for (let i = 0; i < data.length; i += 4)
+        heightData[i >> 2] = data[i] / 255;
+}
+
+function getHeight(x, y, imageExtraDepth) {
+    let d = heightData[x + y * canvasW] || 0;
+    if (d > 0.01)
+        d = d * (1 - imageExtraDepth) + imageExtraDepth;
+    return d;
+}
+
+function stopRender() {
+    if (renderState && renderState.animFrameId) {
+        cancelAnimationFrame(renderState.animFrameId);
+        renderState = null;
+    }
+}
+
+function startRender() {
+    stopRender();
+
+    if (!heightData) return;
+
+    const params = getParamsFromUI();
+    const w = canvasW;
+    const h = canvasH;
+    const drawSeed = new Random(Date.now()).int(1e6);
+
+    // Create ImageData for the full canvas
+    const imageData = mainContext.createImageData(w, h);
+    const pixels = imageData.data;
+
+    // Clear canvas
+    mainCanvas.width = w;
+    mainCanvas.height = h;
+
+    renderState = {
+        frame: 0,
+        totalFrames: h,
+        animFrameId: null,
+        params,
+        drawSeed,
+        imageData,
+        pixels,
+    };
+
+    updateProgress(0, h);
+
+    function renderBatch() {
+        if (!renderState) return;
+
+        const batchSize = 30;
+        const endFrame = Math.min(renderState.frame + batchSize, h);
+
+        for (let y = renderState.frame; y < endFrame; y++) {
+            renderScanline(y, w, h, params, drawSeed, pixels);
+        }
+
+        // Put the updated image data
+        mainContext.putImageData(imageData, 0, 0);
+
+        renderState.frame = endFrame;
+        updateProgress(endFrame, h);
+
+        if (endFrame < h) {
+            renderState.animFrameId = requestAnimationFrame(renderBatch);
+        } else {
+            renderState = null;
+            updateProgress(h, h);
+        }
+    }
+
+    renderState.animFrameId = requestAnimationFrame(renderBatch);
+}
+
+function renderScanline(y, w, h, params, drawSeed, pixels) {
+    const { maxSeparationScale, textureScaleX, textureScaleY,
+            repeatSize, imageExtraDepth, pixelate, showHeight } = params;
+    const maxSeparation = repeatSize * maxSeparationScale;
+
+    // Calculate depth for this scanline
+    const depth = new Float32Array(w);
+    for (let i = 0; i < w; i++) {
+        let d = getHeight(i, y, imageExtraDepth);
+        d = Number.isNaN(d) ? 0 : clamp(d);
+        depth[i] = d;
+    }
+
+    // Calculate stereo offsets (bidirectional)
+    const A = new Float32Array(w);
+    const B = new Float32Array(w);
+
+    for (let i = 0; i < w; i++) {
+        let g, a;
+        const its = 4;
+        const i2 = w - 1 - i;
+
+        g = repeatSize;
+        for (let j = its; j--;) {
+            a = maxSeparation * depth[i - g/2 | 0] || 0;
+            g = repeatSize - a;
+        }
+        A[i] = i < repeatSize ? i : A[i - g | 0] + repeatSize;
+
+        g = repeatSize;
+        for (let j = its; j--;) {
+            a = maxSeparation * depth[i2 + g/2 | 0] || 0;
+            g = repeatSize - a;
+        }
+        B[i2] = i < repeatSize ? i2 : B[i2 + g | 0] - repeatSize;
+    }
+
+    // Average left and right
+    for (let i = 0; i < w; i++)
+        A[i] = (A[i] + B[i]) / 2;
+
+    // Render pixels
+    const p = repeatSize / textureScaleX;
+    for (let i = 0; i < w; i++) {
+        let X = A[i];
+        let Y = y / textureScaleY;
+
+        X = ((X % repeatSize) + repeatSize) % repeatSize;
+        X = X / textureScaleX;
+        if (pixelate) { X |= 0; Y |= 0; }
+
+        const o = drawSeed;
+        const n4 = noiseWrap(X, Y + 1e3 + o, p);
+        const n  = noiseWrap(X, Y + 2e3 + o + n4 * 5, p);
+        const n2 = noiseWrap(X, Y + 3e3 + o, p);
+        const n3 = noiseWrap(X, Y + 4e3 + o, p);
+
+        const d = Math.hypot(i - w/2, y - h/2);
+
+        let r, g, b;
+        if (showHeight) {
+            const v = depth[i] * 255 | 0;
+            r = g = b = v;
+        } else {
+            const hue = Math.sin(n3) * 0.3 + d / (w * 2) + 0.5 + Math.sin(drawSeed);
+            [r, g, b] = hslToRgb(hue, n2, n);
+        }
+
+        const idx = (y * w + i) * 4;
+        pixels[idx]     = r;
+        pixels[idx + 1] = g;
+        pixels[idx + 2] = b;
+        pixels[idx + 3] = 255;
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// UI
+
+function updateProgress(current, total) {
+    const pct = total > 0 ? (current / total * 100) : 0;
+    progressFill.style.width = pct + '%';
+    if (current >= total)
+        progressText.textContent = 'Done';
+    else if (current === 0)
+        progressText.textContent = 'Rendering...';
+    else
+        progressText.textContent = `Rendering... ${pct | 0}%`;
+}
+
+// Slider value displays
+function setupSlider(sliderId, displayId, decimals = 2) {
+    const slider = document.getElementById(sliderId);
+    const display = document.getElementById(displayId);
+    slider.addEventListener('input', () => {
+        display.textContent = parseFloat(slider.value).toFixed(decimals);
+        debouncedRender();
+    });
+}
+
+setupSlider('depthSlider', 'depthVal');
+setupSlider('repeatSlider', 'repeatVal', 0);
+setupSlider('extraDepthSlider', 'extraDepthVal');
+setupSlider('scaleXSlider', 'scaleXVal', 1);
+setupSlider('scaleYSlider', 'scaleYVal', 1);
+
+// Checkbox listeners
+pixelateCheck.addEventListener('change', () => startRender());
+showHeightCheck.addEventListener('change', () => startRender());
+
+// Debounced render for sliders
+let debounceTimer = null;
+function debouncedRender() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(startRender, 150);
+}
+
+// Preset selector
+presetSelect.addEventListener('change', async () => {
+    try {
+        currentImage = await loadImage(presetSelect.value);
+        canvasW = 2000;
+        canvasH = Math.round(2000 * currentImage.height / currentImage.width);
+        setupHeightData(currentImage);
+        startRender();
+    } catch (e) {
+        console.error(e);
+    }
+});
+
+// File input
+fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) loadDroppedFile(file);
+});
+
+// Drag and drop
+let dragCounter = 0;
+const canvasArea = document.getElementById('canvasArea');
+const dropOverlay = document.getElementById('dropOverlay');
+
+canvasArea.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    dragCounter++;
+    dropOverlay.classList.add('active');
+});
+canvasArea.addEventListener('dragover', (e) => {
+    e.preventDefault();
+});
+canvasArea.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter <= 0) {
+        dragCounter = 0;
+        dropOverlay.classList.remove('active');
+    }
+});
+canvasArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragCounter = 0;
+    dropOverlay.classList.remove('active');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) loadDroppedFile(file);
+});
+
+function loadDroppedFile(file) {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        try {
+            currentImage = await loadImage(e.target.result);
+            canvasW = 2000;
+            canvasH = Math.round(2000 * currentImage.height / currentImage.width);
+            setupHeightData(currentImage);
+            startRender();
+            // Reset preset dropdown since custom image loaded
+            presetSelect.value = '';
+        } catch (err) {
+            console.error(err);
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
+// Buttons
+regenerateBtn.addEventListener('click', () => startRender());
+
+saveBtn.addEventListener('click', () => {
+    const link = document.createElement('a');
+    link.download = 'stereogram.png';
+    link.href = mainCanvas.toDataURL('image/png');
+    link.click();
+});
+
+resetBtn.addEventListener('click', () => {
+    depthSlider.value = DEFAULTS.maxSeparationScale;
+    depthVal.textContent = DEFAULTS.maxSeparationScale.toFixed(2);
+
+    repeatSlider.value = DEFAULTS.repeatSize;
+    repeatVal.textContent = DEFAULTS.repeatSize;
+
+    extraDepthSlider.value = DEFAULTS.imageExtraDepth;
+    extraDepthVal.textContent = DEFAULTS.imageExtraDepth.toFixed(2);
+
+    scaleXSlider.value = DEFAULTS.textureScaleX;
+    scaleXVal.textContent = DEFAULTS.textureScaleX.toFixed(1);
+
+    scaleYSlider.value = DEFAULTS.textureScaleY;
+    scaleYVal.textContent = DEFAULTS.textureScaleY.toFixed(1);
+
+    pixelateCheck.checked = false;
+    showHeightCheck.checked = false;
+
+    presetSelect.value = DEFAULTS.imageFilename;
+    presetSelect.dispatchEvent(new Event('change'));
+});
+
+///////////////////////////////////////////////////////////////////////////////
+// STARTUP
+
+async function startup() {
+    try {
+        currentImage = await loadImage(DEFAULTS.imageFilename);
+        canvasW = 2000;
+        canvasH = Math.round(2000 * currentImage.height / currentImage.width);
+        setupHeightData(currentImage);
+        startRender();
+    } catch (e) {
+        console.error('Failed to load default image:', e);
+        // Fallback: generate sphere depth map
+        canvasW = 2000;
+        canvasH = 1000;
+        heightData = new Float32Array(canvasW * canvasH);
+        for (let y = 0; y < canvasH; y++)
+            for (let x = 0; x < canvasW; x++) {
+                const d = ((canvasH*0.45)**2 - (x-canvasW/2)**2 - (y-canvasH/2)**2)**0.5 / (canvasH*0.45);
+                heightData[x + y * canvasW] = d > 0 ? d : 0;
+            }
+        startRender();
+    }
+}
+
+startup();
+
+</script>
+</body>
+</html>
