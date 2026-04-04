@@ -73,7 +73,6 @@ const DEFAULTS = {
     maxSeparationScale: 0.3,
     textureScale: 4,
     repeatSize: 120,
-    imageExtraDepth: 0,
     pixelate: 0,
     imageFilename: 'test1.png',
 };
@@ -98,7 +97,6 @@ function getParamsFromUI() {
         maxSeparationScale: parseFloat(depthSlider.value),
         textureScale:       parseFloat(scaleSlider.value),
         repeatSize:         parseInt(repeatSlider.value),
-        imageExtraDepth:    parseFloat(extraDepthSlider.value),
         pixelate:           pixelateCheck.checked ? 1 : 0,
     };
 }
@@ -147,11 +145,8 @@ function updateDepthCanvas() {
     depthContext.putImageData(imgData, 0, 0);
 }
 
-function getHeight(x, y, imageExtraDepth) {
-    let d = heightData[x + y * canvasW] || 0;
-    if (d > 0.01)
-        d = d * (1 - imageExtraDepth) + imageExtraDepth;
-    return d;
+function getHeight(x, y) {
+    return heightData[x + y * canvasW] || 0;
 }
 
 function stopRender() {
@@ -217,12 +212,12 @@ function startRender() {
 
 function renderScanline(y, w, h, params, drawSeed, pixels) {
     const { maxSeparationScale, textureScale,
-            repeatSize, imageExtraDepth, pixelate } = params;
+            repeatSize, pixelate } = params;
     const maxSeparation = repeatSize * maxSeparationScale;
 
     const depth = new Float32Array(w);
     for (let i = 0; i < w; i++) {
-        let d = getHeight(i, y, imageExtraDepth);
+        let d = getHeight(i, y);
         d = Number.isNaN(d) ? 0 : clamp(d);
         depth[i] = d;
     }
@@ -306,7 +301,6 @@ function setupSlider(sliderId, displayId, decimals = 2) {
 
 setupSlider('depthSlider', 'depthVal');
 setupSlider('repeatSlider', 'repeatVal', 0);
-setupSlider('extraDepthSlider', 'extraDepthVal');
 setupSlider('scaleSlider', 'scaleVal', 1);
 
 pixelateCheck.addEventListener('change', () => startRender());
@@ -397,9 +391,6 @@ resetBtn.addEventListener('click', () => {
 
     repeatSlider.value = DEFAULTS.repeatSize;
     repeatVal.textContent = DEFAULTS.repeatSize;
-
-    extraDepthSlider.value = DEFAULTS.imageExtraDepth;
-    extraDepthVal.textContent = DEFAULTS.imageExtraDepth.toFixed(2);
 
     scaleSlider.value = DEFAULTS.textureScale;
     scaleVal.textContent = DEFAULTS.textureScale.toFixed(1);
