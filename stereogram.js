@@ -299,6 +299,11 @@ function getPatternColor(pattern, X, Y, p, seed) {
         return [v, v, v];
     }
 
+    if (pattern === 'checkerboard') {
+        const v = ((X | 0) + (Y | 0)) & 1 ? 255 : 0;
+        return [v, v, v];
+    }
+
     if (pattern === 'warped') {
         const n4 = noiseWrap(X, Y + 1e3 + seed, p);
         const n  = noiseWrap(X, Y + 2e3 + seed + n4 * 5, p);
@@ -458,14 +463,10 @@ function loadDroppedFile(file) {
 
 // Fullscreen
 fullscreenBtn.addEventListener('click', () => {
-    app.classList.toggle('fullscreen');
-    fullscreenBtn.textContent = app.classList.contains('fullscreen') ? 'Exit Fullscreen' : 'Fullscreen';
-});
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && app.classList.contains('fullscreen')) {
-        app.classList.remove('fullscreen');
-        fullscreenBtn.textContent = 'Fullscreen';
-    }
+    if (document.fullscreenElement)
+        document.exitFullscreen();
+    else
+        mainCanvas.requestFullscreen();
 });
 
 // Buttons
