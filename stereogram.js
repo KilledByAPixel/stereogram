@@ -66,6 +66,17 @@ const noiseWrap = (X, Y, wrap) => {
     return (1-YP)*noise1(X,Y) + YP*noise1(X,Y+1);
 };
 
+const fractalNoise = (X, Y, wrap, octaves=2) => {
+    const G = 0.5;
+    let f = 1, a = 1, ta = a, t = 0;
+    for (let i = octaves; --i >= 0;) {
+        t += a * noiseWrap(X*f, Y*f, wrap);
+        ta += a *= G;
+        f *= 2;
+    }
+    return t / ta;
+};
+
 ///////////////////////////////////////////////////////////////////////////////
 // DEFAULT PARAMETERS
 
@@ -91,7 +102,7 @@ function getParamsFromUI() {
         maxSeparationScale: parseFloat(depthSlider.value),
         textureWrapCount:       parseFloat(scaleSlider.value),
         repeatCount:        parseInt(repeatSlider.value),
-        pixelate:           pixelateCheck.checked ? 1 : 0,
+        pattern:            patternSelect.value,
         invert:             invertCheck.checked ? 1 : 0,
     };
 }
@@ -207,7 +218,7 @@ function startRender() {
 
 function renderScanline(y, w, h, params, drawSeed, pixels) {
     const { maxSeparationScale, textureWrapCount,
-            repeatCount, pixelate, invert } = params;
+            repeatCount, pattern, invert } = params;
     const repeatSize = Math.round(w / repeatCount);
     const maxSeparation = repeatSize * maxSeparationScale;
 
@@ -252,16 +263,38 @@ function renderScanline(y, w, h, params, drawSeed, pixels) {
 
         X = ((X % repeatSize) + repeatSize) % repeatSize;
         X = X / scale;
-        if (pixelate) { X |= 0; Y |= 0; }
 
-        const o = drawSeed;
-        const n4 = noiseWrap(X, Y + 1e3 + o, p);
-        const n  = noiseWrap(X, Y + 2e3 + o + n4 * 5, p);
-        const n2 = noiseWrap(X, Y + 3e3 + o, p);
-        const n3 = noiseWrap(X, Y + 4e3 + o, p);
-
-        const hue = Math.sin(n3) * 0.3 + 0.5 + Math.sin(drawSeed);
-        const [r, g, b] = hslToRgb(hue, n2, n);
+        let r, g, b;
+        if (pattern === 'dots') {
+            const rand = new Random(((X | 0) + (Y | 0) * 9999 + drawSeed) | 0);
+            const v = rand.float(255) | 0;
+            r = g = b = v;
+        } else if (pattern === 'warped') {
+            const o = drawSeed;
+            const n4 = noiseWrap(X, Y + 1e3 + o, p);
+            const n  = noiseWrap(X, Y + 2e3 + o + n4 * 5, p);
+            const n2 = noiseWrap(X, Y + 3e3 + o, p);
+            const n3 = noiseWrap(X, Y + 4e3 + o, p);
+            const hue = Math.sin(n3) * 0.3 + 0.5 + Math.sin(drawSeed);
+            [r, g, b] = hslToRgb(hue, n2, n);
+        } else if (pattern === 'curl') {
+            const o = drawSeed;
+            const f = (x, y) => fractalNoise(x, y + o, p);
+            const e = 1;
+            const dx = (f(X+e, Y) - f(X-e, Y)) / (2*e);
+            const dy = (f(X, Y+e) - f(X, Y-e)) / (2*e);
+            const hue = Math.atan2(dy, dx) / PI * 0.5 + 0.5 + Math.sin(drawSeed);
+            const mag = clamp(Math.hypot(dx, dy) * 2);
+            [r, g, b] = hslToRgb(hue, mag, 0.4 + mag * 0.2);
+        } else {
+            if (pattern === 'pixelated') { X |= 0; Y |= 0; }
+            const o = drawSeed;
+            const n  = fractalNoise(X, Y + 1e3 + o, p);
+            const n2 = fractalNoise(X, Y + 2e3 + o, p);
+            const n3 = fractalNoise(X, Y + 3e3 + o, p);
+            const hue = Math.sin(n3) * 0.3 + 0.5 + Math.sin(drawSeed);
+            [r, g, b] = hslToRgb(hue, n2, n);
+        }
 
         const idx = (y * w + i) * 4;
         pixels[idx]     = r;
@@ -299,7 +332,7 @@ setupSlider('depthSlider', 'depthVal');
 setupSlider('repeatSlider', 'repeatVal', 0);
 setupSlider('scaleSlider', 'scaleVal', 1);
 
-pixelateCheck.addEventListener('change', () => startRender());
+patternSelect.addEventListener('change', () => startRender());
 invertCheck.addEventListener('change', () => startRender());
 showHeightCheck.addEventListener('change', () => {
     depthCanvas.style.display = showHeightCheck.checked ? 'block' : 'none';

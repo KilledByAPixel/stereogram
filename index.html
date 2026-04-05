@@ -227,12 +227,19 @@ button:hover { background: #3a4a5a; }
         <h2>Pattern</h2>
 
         <div class="control-group">
+            <label>Style</label>
+            <select id="patternSelect">
+                <option value="gradient">Gradient Noise</option>
+                <option value="warped">Warped Noise</option>
+                <option value="pixelated">Pixelated Noise</option>
+                <option value="curl">Curl Noise</option>
+                <option value="dots">Random Dots</option>
+            </select>
+        </div>
+        <div class="control-group">
             <label>Texture Scale <span class="value" id="scaleVal">10.0</span></label>
             <input type="range" id="scaleSlider" min="1" max="20" step="0.5" value="10">
         </div>
-        <label class="checkbox-group">
-            <input type="checkbox" id="pixelateCheck"> Pixelate
-        </label>
 
         <div class="separator"></div>
         <h2>View</h2>
