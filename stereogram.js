@@ -70,7 +70,7 @@ const fractalNoise = (X, Y, wrap, octaves=2) => {
     const G = 0.5;
     let f = 1, a = 1, ta = a, t = 0;
     for (let i = octaves; --i >= 0;) {
-        t += a * noiseWrap(X*f, Y*f, wrap);
+        t += a * noiseWrap(X*f, Y*f, wrap*f);
         ta += a *= G;
         f *= 2;
     }
@@ -275,24 +275,25 @@ function renderScanline(y, w, h, params, drawSeed, pixels) {
             const n  = noiseWrap(X, Y + 2e3 + o + n4 * 5, p);
             const n2 = noiseWrap(X, Y + 3e3 + o, p);
             const n3 = noiseWrap(X, Y + 4e3 + o, p);
-            const hue = Math.sin(n3) * 0.3 + 0.5 + Math.sin(drawSeed);
+            const hue = Math.sin(n3) * 0.3 + Math.sin(drawSeed);
             [r, g, b] = hslToRgb(hue, n2, n);
         } else if (pattern === 'curl') {
             const o = drawSeed;
-            const f = (x, y) => fractalNoise(x, y + o, p);
-            const e = 1;
+            const f = (x, y) => fractalNoise(x, y + o, p,1);
+            const e = 0.01;
             const dx = (f(X+e, Y) - f(X-e, Y)) / (2*e);
             const dy = (f(X, Y+e) - f(X, Y-e)) / (2*e);
-            const hue = Math.atan2(dy, dx) / PI * 0.5 + 0.5 + Math.sin(drawSeed);
-            const mag = clamp(Math.hypot(dx, dy) * 2);
-            [r, g, b] = hslToRgb(hue, mag, 0.4 + mag * 0.2);
+            const hue = Math.atan2(dy, dx) / PI * 0.1 + Math.sin(drawSeed);
+            const sat = 0.7;
+            const lit = 0.3 + 0.4 * clamp(Math.hypot(dx, dy));
+            [r, g, b] = hslToRgb(hue, sat, lit);
         } else {
             if (pattern === 'pixelated') { X |= 0; Y |= 0; }
             const o = drawSeed;
             const n  = fractalNoise(X, Y + 1e3 + o, p);
             const n2 = fractalNoise(X, Y + 2e3 + o, p);
             const n3 = fractalNoise(X, Y + 3e3 + o, p);
-            const hue = Math.sin(n3) * 0.3 + 0.5 + Math.sin(drawSeed);
+            const hue = Math.sin(n3) * 0.3 + Math.sin(drawSeed);
             [r, g, b] = hslToRgb(hue, n2, n);
         }
 
