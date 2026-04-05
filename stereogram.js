@@ -295,7 +295,7 @@ function renderScanline(y, w, params, seed, pixels) {
 
 function getPatternColor(pattern, X, Y, p, seed) {
     if (pattern === 'dots') {
-        const rand = new Random(((X | 0) + (Y | 0) * 9999 + seed) | 0);
+        const rand = new Random(((X*8 | 0) + (Y*8 | 0) * 9999 + seed) | 0);
         const v = rand.float(255) | 0;
         return [v, v, v];
     }
