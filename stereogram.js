@@ -212,39 +212,42 @@ function renderScanline(y, w, params, seed, pixels) {
         depth[i] = invert ? 1 - d : d;
     }
 
-    // Stereo offsets (bidirectional)
+    // Propagate texture coordinates from both directions, then average.
+    // Use iterative refinement to find the correct separation: the
+    // depth sample point is the midpoint between the pixel and its
+    // linked neighbor, which depends on the separation itself.
+
     const A = new Float32Array(w);
     const B = new Float32Array(w);
+
+    // Left-to-right: look back by gap (depth-adjusted), add repeatSize
     for (let i = 0; i < w; i++) {
-        let g, a;
-        const i2 = w - 1 - i;
-
-        g = repeatSize;
+        let gap = repeatSize;
         for (let j = 4; j--;) {
-            a = maxSep * depth[i - g/2 | 0] || 0;
-            g = repeatSize - a;
+            const mid = Math.max(0, Math.min(w-1, i - gap/2 | 0));
+            gap = repeatSize - Math.round(maxSep * depth[mid]);
         }
-        A[i] = i < repeatSize ? i : A[i - g | 0] + repeatSize;
-
-        g = repeatSize;
-        for (let j = 4; j--;) {
-            a = maxSep * depth[i2 + g/2 | 0] || 0;
-            g = repeatSize - a;
-        }
-        B[i2] = i < repeatSize ? i2 : B[i2 + g | 0] - repeatSize;
+        A[i] = i < gap ? i : A[i - gap] + repeatSize;
     }
 
-    for (let i = 0; i < w; i++)
-        A[i] = (A[i] + B[i]) / 2;
+    // Right-to-left: look forward by gap, subtract repeatSize
+    for (let i = w - 1; i >= 0; i--) {
+        let gap = repeatSize;
+        for (let j = 4; j--;) {
+            const mid = Math.max(0, Math.min(w-1, i + gap/2 | 0));
+            gap = repeatSize - Math.round(maxSep * depth[mid]);
+        }
+        B[i] = i + gap >= w ? i : B[i + gap] - repeatSize;
+    }
 
-    // Pattern
+    // Assign colors using averaged coordinate
     const p = Math.max(1, Math.round(repeatSize / textureWrapCount));
     const scale = repeatSize / p;
+    const Y = y / scale;
 
     for (let i = 0; i < w; i++) {
-        let X = ((A[i] % repeatSize) + repeatSize) % repeatSize / scale;
-        let Y = y / scale;
-
+        const avg = (A[i] + B[i]) / 2;
+        const X = ((avg % repeatSize) + repeatSize) % repeatSize / scale;
         const [r, g, b] = getPatternColor(pattern, X, Y, p, seed);
 
         const idx = (y * w + i) * 4;
