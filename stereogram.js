@@ -71,7 +71,7 @@ const noiseWrap = (X, Y, wrap) => {
 
 const DEFAULTS = {
     maxSeparationScale: 0.3,
-    textureScale: 6,
+    textureWrapCount: 6,
     repeatCount: 16,
     pixelate: 0,
     imageFilename: 'test1.png',
@@ -95,7 +95,7 @@ const offContext = offCanvas.getContext('2d');
 function getParamsFromUI() {
     return {
         maxSeparationScale: parseFloat(depthSlider.value),
-        textureScale:       parseFloat(scaleSlider.value),
+        textureWrapCount:       parseFloat(scaleSlider.value),
         repeatCount:        parseInt(repeatSlider.value),
         pixelate:           pixelateCheck.checked ? 1 : 0,
         invert:             invertCheck.checked ? 1 : 0,
@@ -212,7 +212,7 @@ function startRender() {
 }
 
 function renderScanline(y, w, h, params, drawSeed, pixels) {
-    const { maxSeparationScale, textureScale,
+    const { maxSeparationScale, textureWrapCount,
             repeatCount, pixelate, invert } = params;
     const repeatSize = Math.round(w / repeatCount);
     const maxSeparation = repeatSize * maxSeparationScale;
@@ -250,7 +250,7 @@ function renderScanline(y, w, h, params, drawSeed, pixels) {
     for (let i = 0; i < w; i++)
         A[i] = (A[i] + B[i]) / 2;
 
-    const p = Math.max(1, Math.round(repeatSize / textureScale));
+    const p = Math.max(1, Math.round(repeatSize / textureWrapCount));
     const scale = repeatSize / p;
     for (let i = 0; i < w; i++) {
         let X = A[i];
@@ -396,8 +396,8 @@ resetBtn.addEventListener('click', () => {
     repeatSlider.value = DEFAULTS.repeatCount;
     repeatVal.textContent = DEFAULTS.repeatCount;
 
-    scaleSlider.value = DEFAULTS.textureScale;
-    scaleVal.textContent = DEFAULTS.textureScale.toFixed(1);
+    scaleSlider.value = DEFAULTS.textureWrapCount;
+    scaleVal.textContent = DEFAULTS.textureWrapCount.toFixed(1);
 
     pixelateCheck.checked = false;
     invertCheck.checked = false;
