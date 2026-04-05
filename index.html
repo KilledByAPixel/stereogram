@@ -25,6 +25,7 @@ html, body { height: 100%; font-family: system-ui, -apple-system, sans-serif; ba
     flex-direction: column;
     gap: 12px;
 }
+.app.fullscreen .sidebar { display: none; }
 .sidebar h1 {
     font-size: 16px;
     color: #eee;
@@ -190,7 +191,7 @@ button:hover { background: #3a4a5a; }
 </style>
 </head>
 <body>
-<div class="app">
+<div class="app" id="app">
     <div class="sidebar">
         <h1>Stereogram Generator</h1>
 
@@ -204,7 +205,7 @@ button:hover { background: #3a4a5a; }
             </select>
         </div>
         <div class="control-group file-input-wrapper">
-            <button id="fileBtn">Upload Image...</button>
+            <button id="fileBtn">Upload Depth Map...</button>
             <input type="file" id="fileInput" accept="image/*">
         </div>
 
@@ -237,15 +238,34 @@ button:hover { background: #3a4a5a; }
                 <option value="pixelated">Pixelated Noise</option>
                 <option value="curl">Curl Noise</option>
                 <option value="dots">Random Dots</option>
+                <option value="custom">Custom Image</option>
             </select>
         </div>
         <div class="control-group">
             <label>Texture Scale <span class="value" id="scaleVal">10.0</span></label>
             <input type="range" id="scaleSlider" min="1" max="20" step="0.5" value="10">
         </div>
+        <div class="control-group file-input-wrapper" id="patternUploadGroup" style="display:none">
+            <button>Upload Pattern...</button>
+            <input type="file" id="patternInput" accept="image/*">
+        </div>
+
+        <div class="separator"></div>
+        <h2>Output</h2>
+
+        <div class="control-group">
+            <label>Resolution</label>
+            <select id="resolutionSelect">
+                <option value="1280x720">1280 x 720</option>
+                <option value="1920x1080" selected>1920 x 1080</option>
+                <option value="2560x1440">2560 x 1440</option>
+                <option value="3840x2160">3840 x 2160</option>
+            </select>
+        </div>
 
         <div class="separator"></div>
         <h2>Actions</h2>
+        <button id="fullscreenBtn">Fullscreen</button>
         <button id="regenerateBtn">Regenerate</button>
         <button id="saveBtn">Save Image</button>
         <button id="resetBtn">Reset Defaults</button>

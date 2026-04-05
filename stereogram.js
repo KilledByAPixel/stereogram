@@ -79,8 +79,6 @@ const fractalNoise = (X, Y, wrap, octaves=2) => {
 ///////////////////////////////////////////////////////////////////////////////
 // CONSTANTS
 
-const CANVAS_W = 1920;
-const CANVAS_H = 1080;
 const DEFAULT_IMAGE = 'test1.png';
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -89,7 +87,11 @@ const DEFAULT_IMAGE = 'test1.png';
 let renderState = null;
 let currentImage = null;
 let heightData = null;
-let canvasW = CANVAS_W, canvasH = CANVAS_H;
+let canvasW = 1920, canvasH = 1080;
+
+// Custom pattern image data
+let patternImageData = null;
+let patternW = 0, patternH = 0;
 
 const mainCanvas = document.getElementById('mainCanvas');
 const mainCtx = mainCanvas.getContext('2d');
@@ -98,13 +100,18 @@ const depthCtx = depthCanvas.getContext('2d');
 const offCanvas = document.createElement('canvas');
 const offCtx = offCanvas.getContext('2d');
 
+function getResolution() {
+    const parts = resolutionSelect.value.split('x');
+    return [parseInt(parts[0]), parseInt(parts[1])];
+}
+
 function getParamsFromUI() {
     return {
-        depthScale:      parseFloat(depthSlider.value),
+        depthScale:       parseFloat(depthSlider.value),
         textureWrapCount: parseFloat(scaleSlider.value),
-        repeatCount:     parseInt(repeatSlider.value),
-        pattern:         patternSelect.value,
-        invert:          invertCheck.checked,
+        repeatCount:      parseInt(repeatSlider.value),
+        pattern:          patternSelect.value,
+        invert:           invertCheck.checked,
     };
 }
 
@@ -152,6 +159,27 @@ function getHeight(x, y) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// CUSTOM PATTERN
+
+function loadPatternImage(image) {
+    const c = document.createElement('canvas');
+    patternW = image.width;
+    patternH = image.height;
+    c.width = patternW;
+    c.height = patternH;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(image, 0, 0);
+    patternImageData = ctx.getImageData(0, 0, patternW, patternH).data;
+}
+
+function samplePattern(X, Y) {
+    const x = ((X % patternW) + patternW) % patternW | 0;
+    const y = ((Y % patternH) + patternH) % patternH | 0;
+    const idx = (y * patternW + x) * 4;
+    return [patternImageData[idx], patternImageData[idx+1], patternImageData[idx+2]];
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // RENDER LOOP
 
 function stopRender() {
@@ -166,6 +194,8 @@ function startRender() {
     if (!heightData) return;
 
     const params = getParamsFromUI();
+    if (params.pattern === 'custom' && !patternImageData) return;
+
     const w = canvasW, h = canvasH;
     const seed = new Random(Date.now()).int(1e6);
 
@@ -212,11 +242,7 @@ function renderScanline(y, w, params, seed, pixels) {
         depth[i] = invert ? 1 - d : d;
     }
 
-    // Propagate texture coordinates from both directions, then average.
-    // Use iterative refinement to find the correct separation: the
-    // depth sample point is the midpoint between the pixel and its
-    // linked neighbor, which depends on the separation itself.
-
+    // Propagate texture coordinates from both directions, then average
     const A = new Float32Array(w);
     const B = new Float32Array(w);
 
@@ -247,8 +273,16 @@ function renderScanline(y, w, params, seed, pixels) {
 
     for (let i = 0; i < w; i++) {
         const avg = (A[i] + B[i]) / 2;
-        const X = ((avg % repeatSize) + repeatSize) % repeatSize / scale;
-        const [r, g, b] = getPatternColor(pattern, X, Y, p, seed);
+        const texX = ((avg % repeatSize) + repeatSize) % repeatSize;
+
+        let r, g, b;
+        if (pattern === 'custom') {
+            const px = texX / repeatSize * patternW;
+            const py = y / repeatSize * patternW;
+            [r, g, b] = samplePattern(px, py);
+        } else {
+            [r, g, b] = getPatternColor(pattern, texX / scale, Y, p, seed);
+        }
 
         const idx = (y * w + i) * 4;
         pixels[idx]     = r;
@@ -319,7 +353,10 @@ setupSlider('depthSlider', 'depthVal');
 setupSlider('repeatSlider', 'repeatVal', 0);
 setupSlider('scaleSlider', 'scaleVal', 1);
 
-patternSelect.addEventListener('change', () => startRender());
+patternSelect.addEventListener('change', () => {
+    patternUploadGroup.style.display = patternSelect.value === 'custom' ? '' : 'none';
+    startRender();
+});
 invertCheck.addEventListener('change', () => startRender());
 showHeightCheck.addEventListener('change', () => {
     depthCanvas.style.display = showHeightCheck.checked ? 'block' : 'none';
@@ -331,11 +368,21 @@ function debouncedRender() {
     debounceTimer = setTimeout(startRender, 150);
 }
 
+// Resolution
+resolutionSelect.addEventListener('change', () => {
+    [canvasW, canvasH] = getResolution();
+    if (currentImage)
+        setHeightData(currentImage);
+    else if (heightData)
+        generateFallbackSphere();
+    startRender();
+});
+
+// Depth image loading
 async function loadPreset(src) {
     try {
         currentImage = await loadImage(src);
-        canvasW = CANVAS_W;
-        canvasH = CANVAS_H;
+        [canvasW, canvasH] = getResolution();
         setHeightData(currentImage);
         startRender();
     } catch (e) {
@@ -350,6 +397,24 @@ fileInput.addEventListener('change', (e) => {
     if (file) loadDroppedFile(file);
 });
 
+// Custom pattern upload
+patternInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+        try {
+            const img = await loadImage(ev.target.result);
+            loadPatternImage(img);
+            startRender();
+        } catch (err) {
+            console.error(err);
+        }
+    };
+    reader.readAsDataURL(file);
+});
+
+// Drag and drop
 let dragCounter = 0;
 const canvasArea = document.getElementById('canvasArea');
 const dropOverlay = document.getElementById('dropOverlay');
@@ -380,8 +445,7 @@ function loadDroppedFile(file) {
     reader.onload = async (e) => {
         try {
             currentImage = await loadImage(e.target.result);
-            canvasW = CANVAS_W;
-            canvasH = CANVAS_H;
+            [canvasW, canvasH] = getResolution();
             setHeightData(currentImage);
             startRender();
             presetSelect.value = '';
@@ -392,6 +456,19 @@ function loadDroppedFile(file) {
     reader.readAsDataURL(file);
 }
 
+// Fullscreen
+fullscreenBtn.addEventListener('click', () => {
+    app.classList.toggle('fullscreen');
+    fullscreenBtn.textContent = app.classList.contains('fullscreen') ? 'Exit Fullscreen' : 'Fullscreen';
+});
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && app.classList.contains('fullscreen')) {
+        app.classList.remove('fullscreen');
+        fullscreenBtn.textContent = 'Fullscreen';
+    }
+});
+
+// Buttons
 regenerateBtn.addEventListener('click', () => startRender());
 
 saveBtn.addEventListener('click', () => {
@@ -411,33 +488,39 @@ resetBtn.addEventListener('click', () => {
         el.dispatchEvent(new Event('change'));
     }
     for (const el of document.querySelectorAll('.sidebar select')) {
-        el.selectedIndex = 0;
+        el.selectedIndex = el.querySelector('[selected]')
+            ? [...el.options].findIndex(o => o.hasAttribute('selected'))
+            : 0;
     }
+    patternUploadGroup.style.display = 'none';
+    [canvasW, canvasH] = getResolution();
     presetSelect.dispatchEvent(new Event('change'));
 });
 
 ///////////////////////////////////////////////////////////////////////////////
 // STARTUP
 
+function generateFallbackSphere() {
+    [canvasW, canvasH] = getResolution();
+    heightData = new Float32Array(canvasW * canvasH);
+    const r = canvasH * 0.45;
+    for (let y = 0; y < canvasH; y++)
+        for (let x = 0; x < canvasW; x++) {
+            const d = (r*r - (x-canvasW/2)**2 - (y-canvasH/2)**2) ** 0.5 / r;
+            heightData[x + y * canvasW] = d > 0 ? d : 0;
+        }
+    setHeightDataFromArray();
+}
+
 async function startup() {
     try {
         currentImage = await loadImage(DEFAULT_IMAGE);
-        canvasW = CANVAS_W;
-        canvasH = CANVAS_H;
+        [canvasW, canvasH] = getResolution();
         setHeightData(currentImage);
         startRender();
     } catch (e) {
         console.error('Failed to load default image:', e);
-        canvasW = CANVAS_W;
-        canvasH = CANVAS_H;
-        heightData = new Float32Array(canvasW * canvasH);
-        const r = canvasH * 0.45;
-        for (let y = 0; y < canvasH; y++)
-            for (let x = 0; x < canvasW; x++) {
-                const d = (r*r - (x-canvasW/2)**2 - (y-canvasH/2)**2) ** 0.5 / r;
-                heightData[x + y * canvasW] = d > 0 ? d : 0;
-            }
-        setHeightDataFromArray();
+        generateFallbackSphere();
         startRender();
     }
 }
