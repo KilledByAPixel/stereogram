@@ -69,13 +69,7 @@ const noiseWrap = (X, Y, wrap) => {
 ///////////////////////////////////////////////////////////////////////////////
 // DEFAULT PARAMETERS
 
-const DEFAULTS = {
-    maxSeparationScale: 0.3,
-    textureWrapCount: 6,
-    repeatCount: 16,
-    pixelate: 0,
-    imageFilename: 'test1.png',
-};
+const DEFAULT_IMAGE = 'test1.png';
 
 ///////////////////////////////////////////////////////////////////////////////
 // RENDERER
@@ -266,9 +260,7 @@ function renderScanline(y, w, h, params, drawSeed, pixels) {
         const n2 = noiseWrap(X, Y + 3e3 + o, p);
         const n3 = noiseWrap(X, Y + 4e3 + o, p);
 
-        const d = Math.hypot(i - w/2, y - h/2);
-
-        const hue = Math.sin(n3) * 0.3 + d / (w * 2) + 0.5 + Math.sin(drawSeed);
+        const hue = Math.sin(n3) * 0.3 + 0.5 + Math.sin(drawSeed);
         const [r, g, b] = hslToRgb(hue, n2, n);
 
         const idx = (y * w + i) * 4;
@@ -296,6 +288,7 @@ function updateProgress(current, total) {
 function setupSlider(sliderId, displayId, decimals = 2) {
     const slider = document.getElementById(sliderId);
     const display = document.getElementById(displayId);
+    display.textContent = parseFloat(slider.value).toFixed(decimals);
     slider.addEventListener('input', () => {
         display.textContent = parseFloat(slider.value).toFixed(decimals);
         debouncedRender();
@@ -390,20 +383,15 @@ saveBtn.addEventListener('click', () => {
 });
 
 resetBtn.addEventListener('click', () => {
-    depthSlider.value = DEFAULTS.maxSeparationScale;
-    depthVal.textContent = DEFAULTS.maxSeparationScale.toFixed(2);
-
-    repeatSlider.value = DEFAULTS.repeatCount;
-    repeatVal.textContent = DEFAULTS.repeatCount;
-
-    scaleSlider.value = DEFAULTS.textureWrapCount;
-    scaleVal.textContent = DEFAULTS.textureWrapCount.toFixed(1);
-
-    pixelateCheck.checked = false;
-    invertCheck.checked = false;
-    showHeightCheck.checked = false;
-
-    presetSelect.value = DEFAULTS.imageFilename;
+    for (const input of document.querySelectorAll('.sidebar input[type="range"]')) {
+        input.value = input.defaultValue;
+        input.dispatchEvent(new Event('input'));
+    }
+    for (const input of document.querySelectorAll('.sidebar input[type="checkbox"]')) {
+        input.checked = input.defaultChecked;
+        input.dispatchEvent(new Event('change'));
+    }
+    presetSelect.value = DEFAULT_IMAGE;
     presetSelect.dispatchEvent(new Event('change'));
 });
 
@@ -412,7 +400,7 @@ resetBtn.addEventListener('click', () => {
 
 async function startup() {
     try {
-        currentImage = await loadImage(DEFAULTS.imageFilename);
+        currentImage = await loadImage(DEFAULT_IMAGE);
         canvasW = 1920;
         canvasH = 1080;
         setupHeightData(currentImage);
