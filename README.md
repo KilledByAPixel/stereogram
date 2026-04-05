@@ -4,7 +4,7 @@ A browser based tool for generating 3D autostereograms from depth maps.
 
 ![Stereogram Screenshot 1](images/example1.png)
 
-## [Live Demo](https://killedbyapixel.github.io/stereogram/)
+# [Try The Live Demo](https://killedbyapixel.github.io/stereogram/)
 
 ## Features
 
