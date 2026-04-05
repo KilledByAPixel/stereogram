@@ -72,7 +72,7 @@ const noiseWrap = (X, Y, wrap) => {
 const DEFAULTS = {
     maxSeparationScale: 0.3,
     textureScale: 6,
-    repeatSize: 120,
+    repeatCount: 16,
     pixelate: 0,
     imageFilename: 'test1.png',
 };
@@ -96,7 +96,7 @@ function getParamsFromUI() {
     return {
         maxSeparationScale: parseFloat(depthSlider.value),
         textureScale:       parseFloat(scaleSlider.value),
-        repeatSize:         parseInt(repeatSlider.value),
+        repeatCount:        parseInt(repeatSlider.value),
         pixelate:           pixelateCheck.checked ? 1 : 0,
         invert:             invertCheck.checked ? 1 : 0,
     };
@@ -213,7 +213,8 @@ function startRender() {
 
 function renderScanline(y, w, h, params, drawSeed, pixels) {
     const { maxSeparationScale, textureScale,
-            repeatSize, pixelate, invert } = params;
+            repeatCount, pixelate, invert } = params;
+    const repeatSize = Math.round(w / repeatCount);
     const maxSeparation = repeatSize * maxSeparationScale;
 
     const depth = new Float32Array(w);
@@ -392,8 +393,8 @@ resetBtn.addEventListener('click', () => {
     depthSlider.value = DEFAULTS.maxSeparationScale;
     depthVal.textContent = DEFAULTS.maxSeparationScale.toFixed(2);
 
-    repeatSlider.value = DEFAULTS.repeatSize;
-    repeatVal.textContent = DEFAULTS.repeatSize;
+    repeatSlider.value = DEFAULTS.repeatCount;
+    repeatVal.textContent = DEFAULTS.repeatCount;
 
     scaleSlider.value = DEFAULTS.textureScale;
     scaleVal.textContent = DEFAULTS.textureScale.toFixed(1);
