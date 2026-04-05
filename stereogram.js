@@ -3,11 +3,10 @@
 ///////////////////////////////////////////////////////////////////////////////
 // MATH UTILITIES
 
-const PI      = Math.PI;
-const abs     = (a) => a < 0 ? -a : a;
-const mod     = (a, b=1) => ((a % b) + b) % b;
-const clamp   = (v, min=0, max=1) => v < min ? min : v > max ? max : v;
-const lerp    = (p, min=0, max=1) => min + clamp(p) * (max-min);
+const PI = Math.PI;
+const abs = (a) => a < 0 ? -a : a;
+const mod = (a, b=1) => ((a % b) + b) % b;
+const clamp = (v, min=0, max=1) => v < min ? min : v > max ? max : v;
 const smoothStep = (p) => p * p * (3 - 2 * p);
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -25,7 +24,7 @@ class Random {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// HSL TO RGB CONVERSION
+// COLOR
 
 function hslToRgb(h, s, l) {
     h = mod(h); s = clamp(s); l = clamp(l);
@@ -51,7 +50,7 @@ function hslToRgb(h, s, l) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// NOISE FUNCTION
+// NOISE
 
 const noiseWrap = (X, Y, wrap) => {
     const hash = (x, y) => {
@@ -78,8 +77,10 @@ const fractalNoise = (X, Y, wrap, octaves=2) => {
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-// DEFAULT PARAMETERS
+// CONSTANTS
 
+const CANVAS_W = 1920;
+const CANVAS_H = 1080;
 const DEFAULT_IMAGE = 'test1.png';
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -88,22 +89,22 @@ const DEFAULT_IMAGE = 'test1.png';
 let renderState = null;
 let currentImage = null;
 let heightData = null;
-let canvasW = 0, canvasH = 0;
+let canvasW = CANVAS_W, canvasH = CANVAS_H;
 
 const mainCanvas = document.getElementById('mainCanvas');
-const mainContext = mainCanvas.getContext('2d');
+const mainCtx = mainCanvas.getContext('2d');
 const depthCanvas = document.getElementById('depthCanvas');
-const depthContext = depthCanvas.getContext('2d');
+const depthCtx = depthCanvas.getContext('2d');
 const offCanvas = document.createElement('canvas');
-const offContext = offCanvas.getContext('2d');
+const offCtx = offCanvas.getContext('2d');
 
 function getParamsFromUI() {
     return {
-        maxSeparationScale: parseFloat(depthSlider.value),
-        textureWrapCount:       parseFloat(scaleSlider.value),
-        repeatCount:        parseInt(repeatSlider.value),
-        pattern:            patternSelect.value,
-        invert:             invertCheck.checked ? 1 : 0,
+        depthScale:      parseFloat(depthSlider.value),
+        textureWrapCount: parseFloat(scaleSlider.value),
+        repeatCount:     parseInt(repeatSlider.value),
+        pattern:         patternSelect.value,
+        invert:          invertCheck.checked,
     };
 }
 
@@ -111,35 +112,30 @@ function loadImage(src) {
     return new Promise((resolve, reject) => {
         const img = new Image();
         img.onload = () => resolve(img);
-        img.onerror = () => reject(new Error('Failed to load image: ' + src));
+        img.onerror = () => reject(new Error('Failed to load: ' + src));
         img.src = src;
     });
 }
 
-function setupHeightData(image) {
-    const w = canvasW;
-    const h = canvasH;
+function setHeightData(image) {
+    offCanvas.width = canvasW;
+    offCanvas.height = canvasH;
+    offCtx.drawImage(image, 0, 0, image.width, image.height, 0, 0, canvasW, canvasH);
+    const data = offCtx.getImageData(0, 0, canvasW, canvasH).data;
 
-    offCanvas.width = w;
-    offCanvas.height = h;
-    offContext.drawImage(image, 0, 0, image.width, image.height, 0, 0, w, h);
-    const data = offContext.getImageData(0, 0, w, h).data;
-
-    heightData = new Float32Array(w * h);
+    heightData = new Float32Array(canvasW * canvasH);
     for (let i = 0; i < data.length; i += 4)
         heightData[i >> 2] = data[i] / 255;
 
-    depthCanvas.width = w;
-    depthCanvas.height = h;
-    depthContext.drawImage(offCanvas, 0, 0);
+    depthCanvas.width = canvasW;
+    depthCanvas.height = canvasH;
+    depthCtx.drawImage(offCanvas, 0, 0);
 }
 
-function updateDepthCanvas() {
-    const w = canvasW;
-    const h = canvasH;
-    depthCanvas.width = w;
-    depthCanvas.height = h;
-    const imgData = depthContext.createImageData(w, h);
+function setHeightDataFromArray() {
+    depthCanvas.width = canvasW;
+    depthCanvas.height = canvasH;
+    const imgData = depthCtx.createImageData(canvasW, canvasH);
     const px = imgData.data;
     for (let i = 0; i < heightData.length; i++) {
         const v = heightData[i] * 255 | 0;
@@ -148,15 +144,18 @@ function updateDepthCanvas() {
         px[i * 4 + 2] = v;
         px[i * 4 + 3] = 255;
     }
-    depthContext.putImageData(imgData, 0, 0);
+    depthCtx.putImageData(imgData, 0, 0);
 }
 
 function getHeight(x, y) {
     return heightData[x + y * canvasW] || 0;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// RENDER LOOP
+
 function stopRender() {
-    if (renderState && renderState.animFrameId) {
+    if (renderState) {
         cancelAnimationFrame(renderState.animFrameId);
         renderState = null;
     }
@@ -164,50 +163,34 @@ function stopRender() {
 
 function startRender() {
     stopRender();
-
     if (!heightData) return;
 
     const params = getParamsFromUI();
-    const w = canvasW;
-    const h = canvasH;
-    const drawSeed = new Random(Date.now()).int(1e6);
-
-    const imageData = mainContext.createImageData(w, h);
-    const pixels = imageData.data;
+    const w = canvasW, h = canvasH;
+    const seed = new Random(Date.now()).int(1e6);
 
     mainCanvas.width = w;
     mainCanvas.height = h;
+    const imageData = mainCtx.createImageData(w, h);
+    const pixels = imageData.data;
 
-    renderState = {
-        frame: 0,
-        totalFrames: h,
-        animFrameId: null,
-        params,
-        drawSeed,
-        imageData,
-        pixels,
-    };
-
+    renderState = { frame: 0, animFrameId: null };
     updateProgress(0, h);
 
     function renderBatch() {
         if (!renderState) return;
 
-        const batchSize = 30;
-        const endFrame = Math.min(renderState.frame + batchSize, h);
+        const endFrame = Math.min(renderState.frame + 30, h);
+        for (let y = renderState.frame; y < endFrame; y++)
+            renderScanline(y, w, params, seed, pixels);
 
-        for (let y = renderState.frame; y < endFrame; y++) {
-            renderScanline(y, w, h, params, drawSeed, pixels);
-        }
-
-        mainContext.putImageData(imageData, 0, 0);
-
+        mainCtx.putImageData(imageData, 0, 0);
         renderState.frame = endFrame;
         updateProgress(endFrame, h);
 
-        if (endFrame < h) {
+        if (endFrame < h)
             renderState.animFrameId = requestAnimationFrame(renderBatch);
-        } else {
+        else {
             renderState = null;
             updateProgress(h, h);
         }
@@ -216,12 +199,12 @@ function startRender() {
     renderState.animFrameId = requestAnimationFrame(renderBatch);
 }
 
-function renderScanline(y, w, h, params, drawSeed, pixels) {
-    const { maxSeparationScale, textureWrapCount,
-            repeatCount, pattern, invert } = params;
+function renderScanline(y, w, params, seed, pixels) {
+    const { depthScale, textureWrapCount, repeatCount, pattern, invert } = params;
     const repeatSize = Math.round(w / repeatCount);
-    const maxSeparation = repeatSize * maxSeparationScale;
+    const maxSep = repeatSize * depthScale;
 
+    // Read depth
     const depth = new Float32Array(w);
     for (let i = 0; i < w; i++) {
         let d = getHeight(i, y);
@@ -229,24 +212,23 @@ function renderScanline(y, w, h, params, drawSeed, pixels) {
         depth[i] = invert ? 1 - d : d;
     }
 
+    // Stereo offsets (bidirectional)
     const A = new Float32Array(w);
     const B = new Float32Array(w);
-
     for (let i = 0; i < w; i++) {
         let g, a;
-        const its = 4;
         const i2 = w - 1 - i;
 
         g = repeatSize;
-        for (let j = its; j--;) {
-            a = maxSeparation * depth[i - g/2 | 0] || 0;
+        for (let j = 4; j--;) {
+            a = maxSep * depth[i - g/2 | 0] || 0;
             g = repeatSize - a;
         }
         A[i] = i < repeatSize ? i : A[i - g | 0] + repeatSize;
 
         g = repeatSize;
-        for (let j = its; j--;) {
-            a = maxSeparation * depth[i2 + g/2 | 0] || 0;
+        for (let j = 4; j--;) {
+            a = maxSep * depth[i2 + g/2 | 0] || 0;
             g = repeatSize - a;
         }
         B[i2] = i < repeatSize ? i2 : B[i2 + g | 0] - repeatSize;
@@ -255,47 +237,15 @@ function renderScanline(y, w, h, params, drawSeed, pixels) {
     for (let i = 0; i < w; i++)
         A[i] = (A[i] + B[i]) / 2;
 
+    // Pattern
     const p = Math.max(1, Math.round(repeatSize / textureWrapCount));
     const scale = repeatSize / p;
+
     for (let i = 0; i < w; i++) {
-        let X = A[i];
+        let X = ((A[i] % repeatSize) + repeatSize) % repeatSize / scale;
         let Y = y / scale;
 
-        X = ((X % repeatSize) + repeatSize) % repeatSize;
-        X = X / scale;
-
-        let r, g, b;
-        if (pattern === 'dots') {
-            const rand = new Random(((X | 0) + (Y | 0) * 9999 + drawSeed) | 0);
-            const v = rand.float(255) | 0;
-            r = g = b = v;
-        } else if (pattern === 'warped') {
-            const o = drawSeed;
-            const n4 = noiseWrap(X, Y + 1e3 + o, p);
-            const n  = noiseWrap(X, Y + 2e3 + o + n4 * 5, p);
-            const n2 = noiseWrap(X, Y + 3e3 + o, p);
-            const n3 = noiseWrap(X, Y + 4e3 + o, p);
-            const hue = Math.sin(n3) * 0.3 + Math.sin(drawSeed);
-            [r, g, b] = hslToRgb(hue, n2, n);
-        } else if (pattern === 'curl') {
-            const o = drawSeed;
-            const f = (x, y) => fractalNoise(x, y + o, p,1);
-            const e = 0.01;
-            const dx = (f(X+e, Y) - f(X-e, Y)) / (2*e);
-            const dy = (f(X, Y+e) - f(X, Y-e)) / (2*e);
-            const hue = Math.atan2(dy, dx) / PI * 0.1 + Math.sin(drawSeed);
-            const sat = 0.7;
-            const lit = 0.3 + 0.4 * clamp(Math.hypot(dx, dy));
-            [r, g, b] = hslToRgb(hue, sat, lit);
-        } else {
-            if (pattern === 'pixelated') { X |= 0; Y |= 0; }
-            const o = drawSeed;
-            const n  = fractalNoise(X, Y + 1e3 + o, p);
-            const n2 = fractalNoise(X, Y + 2e3 + o, p);
-            const n3 = fractalNoise(X, Y + 3e3 + o, p);
-            const hue = Math.sin(n3) * 0.3 + Math.sin(drawSeed);
-            [r, g, b] = hslToRgb(hue, n2, n);
-        }
+        const [r, g, b] = getPatternColor(pattern, X, Y, p, seed);
 
         const idx = (y * w + i) * 4;
         pixels[idx]     = r;
@@ -303,6 +253,41 @@ function renderScanline(y, w, h, params, drawSeed, pixels) {
         pixels[idx + 2] = b;
         pixels[idx + 3] = 255;
     }
+}
+
+function getPatternColor(pattern, X, Y, p, seed) {
+    if (pattern === 'dots') {
+        const rand = new Random(((X | 0) + (Y | 0) * 9999 + seed) | 0);
+        const v = rand.float(255) | 0;
+        return [v, v, v];
+    }
+
+    if (pattern === 'warped') {
+        const n4 = noiseWrap(X, Y + 1e3 + seed, p);
+        const n  = noiseWrap(X, Y + 2e3 + seed + n4 * 5, p);
+        const n2 = noiseWrap(X, Y + 3e3 + seed, p);
+        const n3 = noiseWrap(X, Y + 4e3 + seed, p);
+        const hue = Math.sin(n3) * 0.3 + Math.sin(seed);
+        return hslToRgb(hue, n2, n);
+    }
+
+    if (pattern === 'curl') {
+        const f = (x, y) => fractalNoise(x, y + seed, p, 1);
+        const e = 0.01;
+        const dx = (f(X+e, Y) - f(X-e, Y)) / (2*e);
+        const dy = (f(X, Y+e) - f(X, Y-e)) / (2*e);
+        const hue = Math.atan2(dy, dx) / PI * 0.1 + Math.sin(seed);
+        const lit = 0.3 + 0.4 * clamp(Math.hypot(dx, dy));
+        return hslToRgb(hue, 0.7, lit);
+    }
+
+    // gradient / pixelated
+    if (pattern === 'pixelated') { X |= 0; Y |= 0; }
+    const n  = fractalNoise(X, Y + 1e3 + seed, p);
+    const n2 = fractalNoise(X, Y + 2e3 + seed, p);
+    const n3 = fractalNoise(X, Y + 3e3 + seed, p);
+    const hue = Math.sin(n3) * 0.3 + Math.sin(seed);
+    return hslToRgb(hue, n2, n);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -322,11 +307,9 @@ function updateProgress(current, total) {
 function setupSlider(sliderId, displayId, decimals = 2) {
     const slider = document.getElementById(sliderId);
     const display = document.getElementById(displayId);
-    display.textContent = parseFloat(slider.value).toFixed(decimals);
-    slider.addEventListener('input', () => {
-        display.textContent = parseFloat(slider.value).toFixed(decimals);
-        debouncedRender();
-    });
+    const update = () => display.textContent = parseFloat(slider.value).toFixed(decimals);
+    update();
+    slider.addEventListener('input', () => { update(); debouncedRender(); });
 }
 
 setupSlider('depthSlider', 'depthVal');
@@ -345,17 +328,19 @@ function debouncedRender() {
     debounceTimer = setTimeout(startRender, 150);
 }
 
-presetSelect.addEventListener('change', async () => {
+async function loadPreset(src) {
     try {
-        currentImage = await loadImage(presetSelect.value);
-        canvasW = 1920;
-        canvasH = 1080;
-        setupHeightData(currentImage);
+        currentImage = await loadImage(src);
+        canvasW = CANVAS_W;
+        canvasH = CANVAS_H;
+        setHeightData(currentImage);
         startRender();
     } catch (e) {
         console.error(e);
     }
-});
+}
+
+presetSelect.addEventListener('change', () => loadPreset(presetSelect.value));
 
 fileInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
@@ -371,13 +356,10 @@ canvasArea.addEventListener('dragenter', (e) => {
     dragCounter++;
     dropOverlay.classList.add('active');
 });
-canvasArea.addEventListener('dragover', (e) => {
-    e.preventDefault();
-});
+canvasArea.addEventListener('dragover', (e) => e.preventDefault());
 canvasArea.addEventListener('dragleave', (e) => {
     e.preventDefault();
-    dragCounter--;
-    if (dragCounter <= 0) {
+    if (--dragCounter <= 0) {
         dragCounter = 0;
         dropOverlay.classList.remove('active');
     }
@@ -395,9 +377,9 @@ function loadDroppedFile(file) {
     reader.onload = async (e) => {
         try {
             currentImage = await loadImage(e.target.result);
-            canvasW = 2000;
-            canvasH = Math.round(2000 * currentImage.height / currentImage.width);
-            setupHeightData(currentImage);
+            canvasW = CANVAS_W;
+            canvasH = CANVAS_H;
+            setHeightData(currentImage);
             startRender();
             presetSelect.value = '';
         } catch (err) {
@@ -417,15 +399,17 @@ saveBtn.addEventListener('click', () => {
 });
 
 resetBtn.addEventListener('click', () => {
-    for (const input of document.querySelectorAll('.sidebar input[type="range"]')) {
-        input.value = input.defaultValue;
-        input.dispatchEvent(new Event('input'));
+    for (const el of document.querySelectorAll('.sidebar input[type="range"]')) {
+        el.value = el.defaultValue;
+        el.dispatchEvent(new Event('input'));
     }
-    for (const input of document.querySelectorAll('.sidebar input[type="checkbox"]')) {
-        input.checked = input.defaultChecked;
-        input.dispatchEvent(new Event('change'));
+    for (const el of document.querySelectorAll('.sidebar input[type="checkbox"]')) {
+        el.checked = el.defaultChecked;
+        el.dispatchEvent(new Event('change'));
     }
-    presetSelect.value = DEFAULT_IMAGE;
+    for (const el of document.querySelectorAll('.sidebar select')) {
+        el.selectedIndex = 0;
+    }
     presetSelect.dispatchEvent(new Event('change'));
 });
 
@@ -435,21 +419,22 @@ resetBtn.addEventListener('click', () => {
 async function startup() {
     try {
         currentImage = await loadImage(DEFAULT_IMAGE);
-        canvasW = 1920;
-        canvasH = 1080;
-        setupHeightData(currentImage);
+        canvasW = CANVAS_W;
+        canvasH = CANVAS_H;
+        setHeightData(currentImage);
         startRender();
     } catch (e) {
         console.error('Failed to load default image:', e);
-        canvasW = 1920;
-        canvasH = 1080;
+        canvasW = CANVAS_W;
+        canvasH = CANVAS_H;
         heightData = new Float32Array(canvasW * canvasH);
+        const r = canvasH * 0.45;
         for (let y = 0; y < canvasH; y++)
             for (let x = 0; x < canvasW; x++) {
-                const d = ((canvasH*0.45)**2 - (x-canvasW/2)**2 - (y-canvasH/2)**2)**0.5 / (canvasH*0.45);
+                const d = (r*r - (x-canvasW/2)**2 - (y-canvasH/2)**2) ** 0.5 / r;
                 heightData[x + y * canvasW] = d > 0 ? d : 0;
             }
-        updateDepthCanvas();
+        setHeightDataFromArray();
         startRender();
     }
 }
