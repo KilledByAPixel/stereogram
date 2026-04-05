@@ -194,7 +194,7 @@ button:hover { background: #3a4a5a; }
     <div class="sidebar">
         <h1>Stereogram Generator</h1>
 
-        <h2>Image</h2>
+        <h2>Depth Image</h2>
         <div class="control-group">
             <label>Preset</label>
             <select id="presetSelect">
@@ -222,6 +222,9 @@ button:hover { background: #3a4a5a; }
         <label class="checkbox-group">
             <input type="checkbox" id="invertCheck"> Invert Depth
         </label>
+        <label class="checkbox-group">
+            <input type="checkbox" id="showHeightCheck"> Show Depth Map
+        </label>
 
         <div class="separator"></div>
         <h2>Pattern</h2>
@@ -240,12 +243,6 @@ button:hover { background: #3a4a5a; }
             <label>Texture Scale <span class="value" id="scaleVal">10.0</span></label>
             <input type="range" id="scaleSlider" min="1" max="20" step="0.5" value="10">
         </div>
-
-        <div class="separator"></div>
-        <h2>View</h2>
-        <label class="checkbox-group">
-            <input type="checkbox" id="showHeightCheck"> Show Depth Map
-        </label>
 
         <div class="separator"></div>
         <h2>Actions</h2>
