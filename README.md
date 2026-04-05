@@ -2,8 +2,8 @@
 
 A browser-based tool for generating autostereograms (Magic Eye images) from depth maps.
 
-![Stereogram Screenshot 1](example1.png)
-![Stereogram Screenshot 2](example2.png)
+![Stereogram Screenshot 1](images/example1.png)
+![Stereogram Screenshot 2](images/example2.png)
 
 ## Features
 
