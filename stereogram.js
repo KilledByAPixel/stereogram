@@ -204,7 +204,7 @@ function getPatternColor(pattern, X, Y, p, seed) {
             const n  = noiseWrap(X, Y + 2e3 + seed + n4 * 5, p);
             const n2 = noiseWrap(X, Y + 3e3 + seed, p);
             const n3 = noiseWrap(X, Y + 4e3 + seed, p);
-            return hslToRgb(Math.sin(n3) * 0.5 + Math.sin(seed), n2, n);
+            return hslToRgb(Math.sin(n3) * 0.5 + Math.tan(seed)%1, n2, n);
         }
         default: {
             // gradient / pixelated
@@ -212,7 +212,7 @@ function getPatternColor(pattern, X, Y, p, seed) {
             const n  = fractalNoise(X, Y + 1e3 + seed, p);
             const n2 = fractalNoise(X, Y + 2e3 + seed, p);
             const n3 = fractalNoise(X, Y + 3e3 + seed, p);
-            return hslToRgb(Math.sin(n3) * 0.5 + Math.sin(seed), n2, n);
+            return hslToRgb(Math.sin(n3) + Math.tan(seed)%1, n2, n);
         }
     }
 }
