@@ -267,7 +267,8 @@ function renderScanline(y, w, params, seed, pixels) {
     }
 
     // Assign colors using averaged coordinate
-    const p = Math.max(1, Math.round(repeatSize / textureWrapCount));
+    let p = Math.max(1, Math.round(repeatSize / textureWrapCount));
+    if (pattern === 'checkerboard') p = Math.max(2, p + (p & 1));
     const scale = repeatSize / p;
     const Y = y / scale;
 
@@ -300,7 +301,7 @@ function getPatternColor(pattern, X, Y, p, seed) {
     }
 
     if (pattern === 'checkerboard') {
-        const v = ((X | 0) + (Y | 0)) & 1 ? 255 : 0;
+        const v = ((X/4 | 0) ^ (Y/4 | 0)) & 1 ? 255 : 0;
         return [v, v, v];
     }
 
