@@ -77,6 +77,7 @@ let currentImage = null;
 let heightData = null;
 let canvasW = 1920, canvasH = 1080;
 
+let edgeMask = null;
 let patternImageData = null;
 let patternW = 0, patternH = 0;
 
@@ -109,6 +110,8 @@ function getParams() {
         repeatCount:      parseInt(repeatSlider.value),
         pattern:          patternSelect.value,
         invert:           invertCheck.checked,
+        edgeEnhance:      edgeCheck.checked,
+        edgeStrength:     parseFloat(edgeSlider.value),
     };
 }
 
@@ -162,6 +165,29 @@ function generateSphere() {
             heightData[x + y * canvasW] = d > 0 ? d : 0;
         }
     setHeightFromArray();
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// EDGE ENHANCEMENT
+
+function computeEdgeMask(src, w, h) {
+    const mask = new Float32Array(w * h);
+    for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+            const i = x + y * w;
+            // Sobel X
+            const gx =
+                -src[(x-1)+(y-1)*w] + src[(x+1)+(y-1)*w]
+              - 2*src[(x-1)+y*w]    + 2*src[(x+1)+y*w]
+                -src[(x-1)+(y+1)*w] + src[(x+1)+(y+1)*w];
+            // Sobel Y
+            const gy =
+                -src[(x-1)+(y-1)*w] - 2*src[x+(y-1)*w] - src[(x+1)+(y-1)*w]
+              +  src[(x-1)+(y+1)*w] + 2*src[x+(y+1)*w] + src[(x+1)+(y+1)*w];
+            mask[i] = Math.min(1, Math.sqrt(gx * gx + gy * gy) * 4);
+        }
+    }
+    return mask;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -234,6 +260,10 @@ function startRender() {
     const params = getParams();
     if (params.pattern === 'custom' && !patternImageData) return;
 
+    edgeMask = (params.edgeEnhance && params.edgeStrength > 0)
+        ? computeEdgeMask(heightData, canvasW, canvasH)
+        : null;
+
     const w = canvasW, h = canvasH;
     const seed = new Random(Date.now()).int(1e6);
 
@@ -268,7 +298,7 @@ function startRender() {
 }
 
 function renderScanline(y, w, params, seed, pixels) {
-    const { depthScale, textureWrapCount, repeatCount, pattern, invert } = params;
+    const { depthScale, textureWrapCount, repeatCount, pattern, invert, edgeStrength } = params;
     const repeatSize = Math.round(w / repeatCount);
     const maxSep = repeatSize * depthScale;
 
@@ -300,6 +330,11 @@ function renderScanline(y, w, params, seed, pixels) {
         R[i] = i + gap >= w ? i : R[i + gap] - repeatSize;
     }
 
+    // Compute texture coordinate average for edge detection
+    const avg = new Float32Array(w);
+    for (let i = 0; i < w; i++)
+        avg[i] = (L[i] + R[i]) / 2;
+
     // Texture coordinate mapping
     let p = Math.max(1, Math.round(repeatSize / textureWrapCount));
     if (pattern === 'checkerboard') p = Math.max(2, p + (p & 1));
@@ -307,14 +342,37 @@ function renderScanline(y, w, params, seed, pixels) {
     const texY = y / scale;
 
     for (let i = 0; i < w; i++) {
-        const avg = (L[i] + R[i]) / 2;
-        const texX = ((avg % repeatSize) + repeatSize) % repeatSize;
+        const texX = ((avg[i] % repeatSize) + repeatSize) % repeatSize;
 
         let r, g, b;
         if (pattern === 'custom') {
             [r, g, b] = samplePattern(texX / repeatSize * patternW, y / repeatSize * patternW);
         } else {
             [r, g, b] = getPatternColor(pattern, texX / scale, texY, p, seed);
+        }
+
+        // Edge detection from texture coordinate discontinuities
+        if (edgeMask) {
+            // Horizontal: check wider neighborhood for broader transitions
+            let maxEdge = 0;
+            for (let d = 1; d <= 3; d++) {
+                const prev = i >= d ? avg[i - d] : avg[i];
+                const next = i + d < w ? avg[i + d] : avg[i];
+                const gradient = Math.abs(next - prev) / (2 * d);
+                maxEdge = Math.max(maxEdge, Math.abs(gradient - 1));
+            }
+            // Vertical: use depth map directly for top/bottom edges
+            const di = i + y * canvasW;
+            const above = y > 0 ? heightData[di - canvasW] : heightData[di];
+            const below = y < canvasH - 1 ? heightData[di + canvasW] : heightData[di];
+            const vertEdge = Math.abs(below - above);
+            // Only count sharp vertical edges, not gradual slopes
+            if (vertEdge > 0.05) maxEdge = Math.max(maxEdge, vertEdge);
+
+            const e = clamp(maxEdge * 2.5 * edgeStrength);
+            r *= 1 - e;
+            g *= 1 - e;
+            b *= 1 - e;
         }
 
         const idx = (y * w + i) * 4;
@@ -364,6 +422,12 @@ patternSelect.addEventListener('change', () => {
 });
 
 invertCheck.addEventListener('change', () => startRender());
+
+edgeCheck.addEventListener('change', () => {
+    edgeGroup.style.display = edgeCheck.checked ? '' : 'none';
+    startRender();
+});
+setupSlider('edgeSlider', 'edgeVal', 1);
 
 showHeightCheck.addEventListener('change', () => {
     depthCanvas.style.display = showHeightCheck.checked ? 'block' : 'none';
