@@ -113,6 +113,9 @@ function getParams() {
         invert:           invertCheck.checked,
         edgeEnhance:      edgeCheck.checked,
         edgeStrength:     parseFloat(edgeSlider.value),
+        hueVariance:      parseFloat(hueVarSlider.value),
+        saturation:       parseFloat(satSlider.value),
+        contrast:         parseFloat(contrastSlider.value),
     };
 }
 
@@ -246,7 +249,17 @@ function samplePattern(x, y) {
 ///////////////////////////////////////////////////////////////////////////////
 // PATTERN COLORS
 
-function getPatternColor(pattern, X, Y, p, seed) {
+// Apply hue variance, saturation, and contrast to noise values [n3, n2, n].
+// n3 -> hue offset, n2 -> saturation, n -> lightness around 0.5.
+function shadeNoise(n3, n2, n, seed, hueVar, sat, contrast) {
+    const hue = Math.sin(n3) * hueVar + Math.tan(seed) % 1;
+    const s = clamp(n2 * sat);
+    const l = clamp(0.5 + (n - 0.5) * contrast);
+    return hslToRgb(hue, s, l);
+}
+
+function getPatternColor(pattern, X, Y, p, seed, params) {
+    const { hueVariance, saturation, contrast } = params;
     switch (pattern) {
         case 'dots': {
             const rand = new Random(((X * 8 | 0) + (Y * 8 | 0) * 9999 + seed) | 0);
@@ -262,7 +275,7 @@ function getPatternColor(pattern, X, Y, p, seed) {
             const n  = noiseWrap(X, Y + 2e3 + seed + n4 * 5, p);
             const n2 = noiseWrap(X, Y + 3e3 + seed, p);
             const n3 = noiseWrap(X, Y + 4e3 + seed, p);
-            return hslToRgb(Math.sin(n3) * 0.5 + Math.tan(seed)%1, n2, n);
+            return shadeNoise(n3, n2, n, seed, hueVariance * 0.5, saturation, contrast);
         }
         default: {
             // gradient / pixelated
@@ -270,7 +283,7 @@ function getPatternColor(pattern, X, Y, p, seed) {
             const n  = fractalNoise(X, Y + 1e3 + seed, p);
             const n2 = fractalNoise(X, Y + 2e3 + seed, p);
             const n3 = fractalNoise(X, Y + 3e3 + seed, p);
-            return hslToRgb(Math.sin(n3) + Math.tan(seed)%1, n2, n);
+            return shadeNoise(n3, n2, n, seed, hueVariance, saturation, contrast);
         }
     }
 }
@@ -468,7 +481,7 @@ function renderScanline(y, w, params, seed, pixels) {
         if (pattern === 'custom') {
             [r, g, b] = samplePattern(texX / repeatSize * patternW, y / repeatSize * patternW);
         } else {
-            [r, g, b] = getPatternColor(pattern, texX / scale, texY, p, seed);
+            [r, g, b] = getPatternColor(pattern, texX / scale, texY, p, seed, params);
         }
 
         // Edge enhancement: detect texture coordinate discontinuities.
@@ -530,6 +543,9 @@ function debouncedRender() {
 setupSlider('depthSlider', 'depthVal');
 setupSlider('repeatSlider', 'repeatVal', 0);
 setupSlider('scaleSlider', 'scaleVal', 1);
+setupSlider('hueVarSlider', 'hueVarVal');
+setupSlider('satSlider', 'satVal');
+setupSlider('contrastSlider', 'contrastVal');
 
 patternSelect.addEventListener('change', () => {
     patternUploadGroup.style.display = patternSelect.value === 'custom' ? '' : 'none';
