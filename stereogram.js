@@ -137,6 +137,9 @@ function setHeightFromImage(image) {
     for (let i = 0; i < data.length; i += 4)
         heightData[i >> 2] = data[i] / 255;
 
+    // Detect edges from the sharp depth map BEFORE blurring
+    edgeMask = computeEdgeMask(heightData, canvasW, canvasH);
+
     blurHeightData(2);
     setHeightFromArray();
 }
@@ -191,6 +194,7 @@ function generateSphere() {
             const d = (r * r - (x - canvasW / 2) ** 2 - (y - canvasH / 2) ** 2) ** 0.5 / r;
             heightData[x + y * canvasW] = d > 0 ? d : 0;
         }
+    edgeMask = computeEdgeMask(heightData, canvasW, canvasH);
     setHeightFromArray();
 }
 
@@ -211,7 +215,7 @@ function computeEdgeMask(src, w, h) {
             const gy =
                 -src[(x-1)+(y-1)*w] - 2*src[x+(y-1)*w] - src[(x+1)+(y-1)*w]
               +  src[(x-1)+(y+1)*w] + 2*src[x+(y+1)*w] + src[(x+1)+(y+1)*w];
-            mask[i] = Math.min(1, Math.sqrt(gx * gx + gy * gy) * 4);
+            mask[i] = Math.min(1, Math.sqrt(gx * gx + gy * gy) * 2);
         }
     }
     return mask;
@@ -287,10 +291,6 @@ function startRender() {
     const params = getParams();
     if (params.pattern === 'custom' && !patternImageData) return;
 
-    edgeMask = (params.edgeEnhance && params.edgeStrength > 0)
-        ? computeEdgeMask(heightData, canvasW, canvasH)
-        : null;
-
     const w = canvasW, h = canvasH;
     const seed = new Random(Date.now()).int(1e6);
 
@@ -348,7 +348,8 @@ function drawDot(x, y, r) {
 }
 
 function renderScanline(y, w, params, seed, pixels) {
-    const { depthScale, textureWrapCount, repeatCount, pattern, invert, edgeStrength } = params;
+    const { depthScale, textureWrapCount, repeatCount, pattern, invert, edgeEnhance, edgeStrength } = params;
+    const useEdges = edgeEnhance && edgeMask && edgeStrength > 0;
     const repeatSize = Math.round(w / repeatCount);
     const maxSep = repeatSize * depthScale;
 
@@ -400,7 +401,7 @@ function renderScanline(y, w, params, seed, pixels) {
         }
     }
 
-    // Compute texture coordinate average for edge detection
+    // Average the two passes
     const avg = new Float32Array(w);
     for (let i = 0; i < w; i++)
         avg[i] = (L[i] + R[i]) / 2;
@@ -421,25 +422,20 @@ function renderScanline(y, w, params, seed, pixels) {
             [r, g, b] = getPatternColor(pattern, texX / scale, texY, p, seed);
         }
 
-        // Edge detection from texture coordinate discontinuities
-        if (edgeMask) {
-            // Horizontal: check wider neighborhood for broader transitions
+        // Edge enhancement: detect texture coordinate discontinuities.
+        // When depth is flat, avg[i+1]-avg[i] == 1; deviations from 1
+        // indicate depth changes. This naturally aligns for both eyes
+        // since both pixels in a stereo pair share the same gradient.
+        if (useEdges) {
             let maxEdge = 0;
             for (let d = 1; d <= 3; d++) {
                 const prev = i >= d ? avg[i - d] : avg[i];
                 const next = i + d < w ? avg[i + d] : avg[i];
-                const gradient = Math.abs(next - prev) / (2 * d);
-                maxEdge = Math.max(maxEdge, Math.abs(gradient - 1));
+                const grad = (next - prev) / (2 * d);
+                const e = Math.abs(grad - 1);
+                if (e > maxEdge) maxEdge = e;
             }
-            // Vertical: use depth map directly for top/bottom edges
-            const di = i + y * canvasW;
-            const above = y > 0 ? heightData[di - canvasW] : heightData[di];
-            const below = y < canvasH - 1 ? heightData[di + canvasW] : heightData[di];
-            const vertEdge = Math.abs(below - above);
-            // Only count sharp vertical edges, not gradual slopes
-            if (vertEdge > 0.05) maxEdge = Math.max(maxEdge, vertEdge);
-
-            const e = clamp(maxEdge * 2.5 * edgeStrength);
+            const e = clamp(maxEdge * edgeStrength);
             r *= 1 - e;
             g *= 1 - e;
             b *= 1 - e;
