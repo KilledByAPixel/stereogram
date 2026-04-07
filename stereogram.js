@@ -137,9 +137,36 @@ function setHeightFromImage(image) {
     for (let i = 0; i < data.length; i += 4)
         heightData[i >> 2] = data[i] / 255;
 
-    depthCanvas.width = canvasW;
-    depthCanvas.height = canvasH;
-    depthCtx.drawImage(offCanvas, 0, 0);
+    blurHeightData(2);
+    setHeightFromArray();
+}
+
+// Single-pass separable box blur. Radius is in pixels.
+function blurHeightData(radius) {
+    if (radius <= 0) return;
+    const w = canvasW, h = canvasH;
+    const tmp = new Float32Array(w * h);
+    // Horizontal
+    for (let y = 0; y < h; y++) {
+        const row = y * w;
+        for (let x = 0; x < w; x++) {
+            let sum = 0, count = 0;
+            const x0 = Math.max(0, x - radius);
+            const x1 = Math.min(w - 1, x + radius);
+            for (let k = x0; k <= x1; k++) { sum += heightData[row + k]; count++; }
+            tmp[row + x] = sum / count;
+        }
+    }
+    // Vertical
+    for (let x = 0; x < w; x++) {
+        for (let y = 0; y < h; y++) {
+            let sum = 0, count = 0;
+            const y0 = Math.max(0, y - radius);
+            const y1 = Math.min(h - 1, y + radius);
+            for (let k = y0; k <= y1; k++) { sum += tmp[k * w + x]; count++; }
+            heightData[y * w + x] = sum / count;
+        }
+    }
 }
 
 function setHeightFromArray() {
@@ -283,6 +310,7 @@ function startRender() {
             renderScanline(y, w, params, seed, pixels);
 
         mainCtx.putImageData(imageData, 0, 0);
+        drawConvergenceDots(Math.round(w / params.repeatCount));
         renderState.frame = end;
         updateProgress(end, h);
 
@@ -295,6 +323,28 @@ function startRender() {
     }
 
     renderState.animFrameId = requestAnimationFrame(renderBatch);
+}
+
+function drawConvergenceDots(repeatSize) {
+    if (!dotsCheck.checked) return;
+    const r = Math.max(6, Math.round(repeatSize * 0.025));
+    const cy = r * 3;
+    const half = repeatSize / 2;
+    const xL = canvasW / 2 - half;
+    const xR = canvasW / 2 + half;
+    mainCtx.fillStyle = '#fff';
+    mainCtx.strokeStyle = '#000';
+    mainCtx.lineWidth = 2;
+    drawDot(xL, cy, r);
+    drawDot(xR, cy, r);
+}
+
+function drawDot(x, y, r) {
+    mainCtx.beginPath();
+    mainCtx.moveTo(x + r, y);
+    mainCtx.arc(x, y, r, 0, PI * 2);
+    mainCtx.fill();
+    mainCtx.stroke();
 }
 
 function renderScanline(y, w, params, seed, pixels) {
@@ -452,6 +502,8 @@ setupSlider('edgeSlider', 'edgeVal', 1);
 showHeightCheck.addEventListener('change', () => {
     depthCanvas.style.display = showHeightCheck.checked ? 'block' : 'none';
 });
+
+dotsCheck.addEventListener('change', () => startRender());
 
 resolutionSelect.addEventListener('change', () => {
     [canvasW, canvasH] = getResolution();
