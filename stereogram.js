@@ -299,7 +299,7 @@ function getPatternColor(pattern, X, Y, p, seed, params) {
             return [v, v, v];
         }
         case 'checkerboard': {
-            const v = ((X / 4 | 0) ^ (Y / 4 | 0)) & 1 ? 255 : 0;
+            const v = ((X | 0) ^ (Y | 0)) & 1 ? 255 : 0;
             return [v, v, v];
         }
         case 'warped': {
