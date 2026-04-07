@@ -75,6 +75,7 @@ const DEFAULT_IMAGE = 'images/test1.png';
 let renderState = null;
 let currentImage = null;
 let heightData = null;
+let heightDataRaw = null;  // unblurred copy used for edge detection
 let canvasW = 1920, canvasH = 1080;
 
 let edgeMask = null;
@@ -137,8 +138,8 @@ function setHeightFromImage(image) {
     for (let i = 0; i < data.length; i += 4)
         heightData[i >> 2] = data[i] / 255;
 
-    // Detect edges from the sharp depth map BEFORE blurring
-    edgeMask = computeEdgeMask(heightData, canvasW, canvasH);
+    // Keep an unblurred copy for edge detection
+    heightDataRaw = new Float32Array(heightData);
 
     blurHeightData(2);
     setHeightFromArray();
@@ -194,7 +195,7 @@ function generateSphere() {
             const d = (r * r - (x - canvasW / 2) ** 2 - (y - canvasH / 2) ** 2) ** 0.5 / r;
             heightData[x + y * canvasW] = d > 0 ? d : 0;
         }
-    edgeMask = computeEdgeMask(heightData, canvasW, canvasH);
+    heightDataRaw = new Float32Array(heightData);
     setHeightFromArray();
 }
 
@@ -349,7 +350,7 @@ function drawDot(x, y, r) {
 
 function renderScanline(y, w, params, seed, pixels) {
     const { depthScale, textureWrapCount, repeatCount, pattern, invert, edgeEnhance, edgeStrength } = params;
-    const useEdges = edgeEnhance && edgeMask && edgeStrength > 0;
+    const useEdges = edgeEnhance && edgeStrength > 0;
     const repeatSize = Math.round(w / repeatCount);
     const maxSep = repeatSize * depthScale;
 
@@ -406,6 +407,54 @@ function renderScanline(y, w, params, seed, pixels) {
     for (let i = 0; i < w; i++)
         avg[i] = (L[i] + R[i]) / 2;
 
+    // For edge detection, run a second propagation on the raw (unblurred)
+    // depth so the texture coordinate has sharp discontinuities at depth
+    // boundaries. The blurred version smears them out.
+    let edgeAvg = avg;
+    if (useEdges) {
+        const depthRaw = new Float32Array(w);
+        for (let i = 0; i < w; i++) {
+            let d = heightDataRaw[i + y * canvasW] || 0;
+            if (Number.isNaN(d)) d = 0;
+            depthRaw[i] = invert ? 1 - clamp(d) : clamp(d);
+        }
+        const Lr = new Float32Array(w);
+        const Rr = new Float32Array(w);
+        for (let i = 0; i < w; i++) {
+            let gap = repeatSize;
+            for (let j = 4; j--;) {
+                const m = Math.max(0, Math.min(w - 1, i - gap / 2 | 0));
+                gap = repeatSize - maxSep * depthRaw[m];
+            }
+            const src = i - gap;
+            if (src < 0) Lr[i] = i;
+            else {
+                const lo = src | 0;
+                const hi = Math.min(w - 1, lo + 1);
+                const t = src - lo;
+                Lr[i] = (1 - t) * Lr[lo] + t * Lr[hi] + repeatSize;
+            }
+        }
+        for (let i = w - 1; i >= 0; i--) {
+            let gap = repeatSize;
+            for (let j = 4; j--;) {
+                const m = Math.max(0, Math.min(w - 1, i + gap / 2 | 0));
+                gap = repeatSize - maxSep * depthRaw[m];
+            }
+            const src = i + gap;
+            if (src >= w) Rr[i] = i;
+            else {
+                const lo = src | 0;
+                const hi = Math.min(w - 1, lo + 1);
+                const t = src - lo;
+                Rr[i] = (1 - t) * Rr[lo] + t * Rr[hi] - repeatSize;
+            }
+        }
+        edgeAvg = new Float32Array(w);
+        for (let i = 0; i < w; i++)
+            edgeAvg[i] = (Lr[i] + Rr[i]) / 2;
+    }
+
     // Texture coordinate mapping
     let p = Math.max(1, Math.round(repeatSize / textureWrapCount));
     if (pattern === 'checkerboard') p = Math.max(2, p + (p & 1));
@@ -429,8 +478,8 @@ function renderScanline(y, w, params, seed, pixels) {
         if (useEdges) {
             let maxEdge = 0;
             for (let d = 1; d <= 3; d++) {
-                const prev = i >= d ? avg[i - d] : avg[i];
-                const next = i + d < w ? avg[i + d] : avg[i];
+                const prev = i >= d ? edgeAvg[i - d] : edgeAvg[i];
+                const next = i + d < w ? edgeAvg[i + d] : edgeAvg[i];
                 const grad = (next - prev) / (2 * d);
                 const e = Math.abs(grad - 1);
                 if (e > maxEdge) maxEdge = e;
