@@ -547,10 +547,18 @@ setupSlider('hueVarSlider', 'hueVarVal');
 setupSlider('satSlider', 'satVal');
 setupSlider('contrastSlider', 'contrastVal');
 
-patternSelect.addEventListener('change', () => {
+function updatePatternControls() {
+    const noisy = ['gradient', 'warped', 'pixelated'].includes(patternSelect.value);
+    for (const g of [hueVarGroup, satGroup, contrastGroup])
+        g.classList.toggle('disabled', !noisy);
     patternUploadGroup.style.display = patternSelect.value === 'custom' ? '' : 'none';
+}
+
+patternSelect.addEventListener('change', () => {
+    updatePatternControls();
     startRender();
 });
+updatePatternControls();
 
 invertCheck.addEventListener('change', () => startRender());
 

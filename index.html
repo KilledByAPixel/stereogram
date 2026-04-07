@@ -84,6 +84,11 @@ html, body { height: 100%; font-family: system-ui, -apple-system, sans-serif; ba
 }
 .checkbox-group input { cursor: pointer; }
 
+.control-group.disabled {
+    opacity: 0.4;
+    pointer-events: none;
+}
+
 select, button {
     width: 100%;
     padding: 8px 10px;
@@ -214,8 +219,8 @@ button:hover { background: #3a4a5a; }
         <h2>Stereogram</h2>
 
         <div class="control-group">
-            <label>Depth Intensity <span class="value" id="depthVal">0.3</span></label>
-            <input type="range" id="depthSlider" min="0" max=".5" step="0.01" value="0.3">
+            <label>Depth Intensity <span class="value" id="depthVal">0.4</span></label>
+            <input type="range" id="depthSlider" min="0" max=".5" step="0.01" value="0.4">
         </div>
         <div class="control-group">
             <label>Repeat Count <span class="value" id="repeatVal">16</span></label>
@@ -256,15 +261,15 @@ button:hover { background: #3a4a5a; }
             <label>Texture Scale <span class="value" id="scaleVal">10.0</span></label>
             <input type="range" id="scaleSlider" min="1" max="30" step="0.5" value="10">
         </div>
-        <div class="control-group">
+        <div class="control-group" id="hueVarGroup">
             <label>Hue Variance <span class="value" id="hueVarVal">1.00</span></label>
             <input type="range" id="hueVarSlider" min="0" max="2" step="0.05" value="1">
         </div>
-        <div class="control-group">
+        <div class="control-group" id="satGroup">
             <label>Saturation <span class="value" id="satVal">1.00</span></label>
             <input type="range" id="satSlider" min="0" max="1.5" step="0.05" value="1">
         </div>
-        <div class="control-group">
+        <div class="control-group" id="contrastGroup">
             <label>Contrast <span class="value" id="contrastVal">1.00</span></label>
             <input type="range" id="contrastSlider" min="0" max="2" step="0.05" value="1">
         </div>
