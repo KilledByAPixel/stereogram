@@ -299,7 +299,11 @@ function getPatternColor(pattern, X, Y, p, seed, params) {
             return [v, v, v];
         }
         case 'checkerboard': {
-            const v = ((X | 0) ^ (Y | 0)) & 1 ? 255 : 0;
+            // Force an even number of cells per repeat for seamless wrap.
+            const N = Math.max(2, Math.round(params.textureWrapCount / 8) * 2);
+            const cx = (X * N / p) | 0;
+            const cy = (Y * N / p) | 0;
+            const v = (cx ^ cy) & 1 ? 255 : 0;
             return [v, v, v];
         }
         case 'warped': {
@@ -501,8 +505,7 @@ function renderScanline(y, w, params, seed, pixels) {
     }
 
     // Texture coordinate mapping
-    let p = Math.max(1, Math.round(repeatSize / textureWrapCount));
-    if (pattern === 'checkerboard') p = Math.max(2, p + (p & 1));
+    const p = Math.max(1, Math.round(repeatSize / textureWrapCount));
     const scale = repeatSize / p;
     const texY = y / scale;
 
