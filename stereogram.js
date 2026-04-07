@@ -310,24 +310,44 @@ function renderScanline(y, w, params, seed, pixels) {
         depth[i] = invert ? 1 - clamp(d) : clamp(d);
     }
 
-    // Bidirectional propagation of texture coordinates
+    // Bidirectional propagation of texture coordinates with subpixel
+    // gaps to avoid quantization artifacts (visible as noise on sharp
+    // patterns like checkerboard).
     const L = new Float32Array(w);
     const R = new Float32Array(w);
 
     for (let i = 0; i < w; i++) {
         let gap = repeatSize;
         for (let j = 4; j--;) {
-            gap = repeatSize - Math.round(maxSep * depth[Math.max(0, Math.min(w - 1, i - gap / 2 | 0))]);
+            const m = Math.max(0, Math.min(w - 1, i - gap / 2 | 0));
+            gap = repeatSize - maxSep * depth[m];
         }
-        L[i] = i < gap ? i : L[i - gap] + repeatSize;
+        const src = i - gap;
+        if (src < 0) {
+            L[i] = i;
+        } else {
+            const lo = src | 0;
+            const hi = Math.min(w - 1, lo + 1);
+            const t = src - lo;
+            L[i] = (1 - t) * L[lo] + t * L[hi] + repeatSize;
+        }
     }
 
     for (let i = w - 1; i >= 0; i--) {
         let gap = repeatSize;
         for (let j = 4; j--;) {
-            gap = repeatSize - Math.round(maxSep * depth[Math.max(0, Math.min(w - 1, i + gap / 2 | 0))]);
+            const m = Math.max(0, Math.min(w - 1, i + gap / 2 | 0));
+            gap = repeatSize - maxSep * depth[m];
         }
-        R[i] = i + gap >= w ? i : R[i + gap] - repeatSize;
+        const src = i + gap;
+        if (src >= w) {
+            R[i] = i;
+        } else {
+            const lo = src | 0;
+            const hi = Math.min(w - 1, lo + 1);
+            const t = src - lo;
+            R[i] = (1 - t) * R[lo] + t * R[hi] - repeatSize;
+        }
     }
 
     // Compute texture coordinate average for edge detection
