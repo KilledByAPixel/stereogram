@@ -45,16 +45,48 @@ function hslToRgb(h, s, l) {
 ///////////////////////////////////////////////////////////////////////////////
 // NOISE
 
+// Gradient (Perlin-style) noise with horizontal wrapping. Returns [0, 1].
+// Uses random unit-ish gradient vectors at grid corners and dot products
+// against the offset, eliminating the axis-aligned blobs of value noise.
+const GRADIENTS = [
+    [ 1,  1], [-1,  1], [ 1, -1], [-1, -1],
+    [ 1,  0], [-1,  0], [ 0,  1], [ 0, -1],
+];
+
+const intHash = (x, y) => {
+    let h = (x | 0) * 374761393 + (y | 0) * 668265263;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return (h ^ (h >>> 16)) >>> 0;
+};
+
 const noiseWrap = (X, Y, wrap) => {
-    const hash = (x, y) => {
+    const xi = Math.floor(X);
+    const yi = Math.floor(Y);
+    const xf = X - xi;
+    const yf = Y - yi;
+
+    const grad = (x, y) => {
         x = mod(x + 1e3, wrap) | 0;
-        y = y | 0;
-        return abs(Math.sin(y*y%17371+123^x*x%13331+321) * 3e4) % 1;
+        return GRADIENTS[intHash(x, y) & 7];
     };
-    const xp = smoothStep(mod(X));
-    const yp = smoothStep(mod(Y));
-    const row = (X, Y) => (1 - xp) * hash(X, Y) + xp * hash(X + 1, Y);
-    return (1 - yp) * row(X, Y) + yp * row(X, Y + 1);
+
+    const g00 = grad(xi,     yi    );
+    const g10 = grad(xi + 1, yi    );
+    const g01 = grad(xi,     yi + 1);
+    const g11 = grad(xi + 1, yi + 1);
+
+    const n00 = g00[0] * xf       + g00[1] * yf;
+    const n10 = g10[0] * (xf - 1) + g10[1] * yf;
+    const n01 = g01[0] * xf       + g01[1] * (yf - 1);
+    const n11 = g11[0] * (xf - 1) + g11[1] * (yf - 1);
+
+    const u = smoothStep(xf);
+    const v = smoothStep(yf);
+    const nx0 = n00 * (1 - u) + n10 * u;
+    const nx1 = n01 * (1 - u) + n11 * u;
+
+    // Map roughly [-0.7, 0.7] to [0, 1]
+    return clamp((nx0 * (1 - v) + nx1 * v) * 0.7 + 0.5);
 };
 
 const fractalNoise = (X, Y, wrap, octaves=2) => {
@@ -279,7 +311,7 @@ function getPatternColor(pattern, X, Y, p, seed, params) {
         }
         default: {
             // gradient / pixelated
-            if (pattern === 'pixelated') { X |= 0; Y |= 0; }
+            if (pattern === 'pixelated') { X = (X | 0) + 0.5; Y = (Y | 0) + 0.5; }
             const n  = fractalNoise(X, Y + 1e3 + seed, p);
             const n2 = fractalNoise(X, Y + 2e3 + seed, p);
             const n3 = fractalNoise(X, Y + 3e3 + seed, p);
