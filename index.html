@@ -297,7 +297,10 @@ button:hover { background: #3a4a5a; }
                     <input type="checkbox" id="seedLockCheck"> Lock
                 </label>
             </label>
-            <input type="number" id="seedInput" min="0" max="999999" value="0" style="width:100%;padding:8px 10px;background:#333;color:#ccc;border:1px solid #555;border-radius:4px;font-size:13px;font-family:monospace">
+            <div style="display:flex;gap:4px">
+                <input type="number" id="seedInput" min="0" max="999999" value="0" style="flex:1;min-width:0;padding:8px 10px;background:#333;color:#ccc;border:1px solid #555;border-radius:4px;font-size:13px;font-family:monospace">
+                <button id="seedRandomBtn" title="Randomize seed" style="width:auto;padding:8px 12px">🎲</button>
+            </div>
         </div>
         <div class="control-group file-input-wrapper" id="patternUploadGroup">
             <button>Upload Pattern...</button>

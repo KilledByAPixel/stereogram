@@ -589,6 +589,11 @@ function updatePatternControls() {
 }
 
 seedInput.addEventListener('input', () => { if (seedLockCheck.checked) debouncedRender(); });
+seedRandomBtn.addEventListener('click', () => {
+    seedLockCheck.checked = true;
+    seedInput.value = new Random(Date.now()).int(1e6);
+    startRender();
+});
 seedLockCheck.addEventListener('change', () => {
     if (!seedLockCheck.checked) startRender();
 });
