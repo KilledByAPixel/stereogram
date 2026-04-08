@@ -588,10 +588,17 @@ function renderScanline(y, w, params, seed, pixels) {
 function updateProgress(current, total) {
     const pct = total > 0 ? (current / total * 100) : 0;
     progressFill.style.width = pct + '%';
-    progressText.textContent =
-        current >= total ? 'Done' :
-        current === 0    ? 'Rendering...' :
-                           `Rendering... ${pct | 0}%`;
+    progressBar.classList.toggle('active', current < total);
+}
+
+// Single source of truth for conditional control visibility.
+function syncVisibility() {
+    edgeGroup.hidden = !edgeCheck.checked;
+    imageTintGroup.hidden = !imageTintCheck.checked;
+    depthCanvas.style.display = showHeightCheck.checked ? 'block' : 'none';
+    const isText = presetSelect.value === 'text';
+    textGroup.hidden = !isText;
+    fontGroup.hidden = !isText;
 }
 
 function setupSlider(id, displayId, decimals = 2) {
@@ -642,24 +649,17 @@ patternSelect.addEventListener('change', () => {
     startRender();
 });
 updatePatternControls();
+syncVisibility();
 
 invertCheck.addEventListener('change', () => startRender());
 
-edgeCheck.addEventListener('change', () => {
-    edgeGroup.style.display = edgeCheck.checked ? '' : 'none';
-    startRender();
-});
+edgeCheck.addEventListener('change', () => { syncVisibility(); startRender(); });
 setupSlider('edgeSlider', 'edgeVal', 1);
 
-imageTintCheck.addEventListener('change', () => {
-    imageTintGroup.style.display = imageTintCheck.checked ? '' : 'none';
-    startRender();
-});
+imageTintCheck.addEventListener('change', () => { syncVisibility(); startRender(); });
 setupSlider('imageTintSlider', 'imageTintVal');
 
-showHeightCheck.addEventListener('change', () => {
-    depthCanvas.style.display = showHeightCheck.checked ? 'block' : 'none';
-});
+showHeightCheck.addEventListener('change', syncVisibility);
 
 dotsCheck.addEventListener('change', () => startRender());
 
@@ -734,9 +734,7 @@ resetBtn.addEventListener('click', () => {
         const sel = [...el.options].findIndex(o => o.hasAttribute('selected'));
         el.selectedIndex = sel >= 0 ? sel : 0;
     });
-    edgeGroup.style.display = edgeCheck.checked ? '' : 'none';
-    imageTintGroup.style.display = imageTintCheck.checked ? '' : 'none';
-    depthCanvas.style.display = showHeightCheck.checked ? 'block' : 'none';
+    syncVisibility();
     updatePatternControls();
     startRender();
 });
@@ -745,9 +743,8 @@ resetBtn.addEventListener('click', () => {
 // FILE LOADING
 
 presetSelect.addEventListener('change', async () => {
+    syncVisibility();
     const isText = presetSelect.value === 'text';
-    textGroup.style.display = isText ? '' : 'none';
-    fontGroup.style.display = isText ? '' : 'none';
     if (isText) {
         currentImage = null;
         [canvasW, canvasH] = getResolution();

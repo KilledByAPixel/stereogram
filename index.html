@@ -85,11 +85,12 @@ html, body { height: 100%; font-family: system-ui, -apple-system, sans-serif; ba
 .checkbox-group input { cursor: pointer; }
 
 .control-group.disabled {
-    opacity: 0.4;
+    opacity: 0.5;
+    filter: saturate(0.4);
     pointer-events: none;
 }
 
-select, button {
+select, button, .text-input {
     width: 100%;
     padding: 8px 10px;
     background: #333;
@@ -99,9 +100,31 @@ select, button {
     font-size: 13px;
     cursor: pointer;
 }
-select:hover, button:hover { border-color: #7af; }
+.text-input { cursor: text; font-family: inherit; }
+select:hover, button:hover, .text-input:hover { border-color: #7af; }
 button { background: #2a3a4a; }
 button:hover { background: #3a4a5a; }
+
+/* Inline icon button (e.g. dice next to seed, wand next to depth) */
+.inline-btn {
+    width: auto;
+    padding: 2px 6px;
+    font-size: 12px;
+    background: #2a3a4a;
+    border: 1px solid #555;
+    border-radius: 3px;
+    color: #ccc;
+    cursor: pointer;
+    line-height: 1;
+}
+.inline-btn:hover { border-color: #7af; background: #3a4a5a; }
+
+.label-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.label-row .value { margin-left: auto; }
 
 .file-input-wrapper {
     position: relative;
@@ -168,7 +191,9 @@ button:hover { background: #3a4a5a; }
     border-radius: 2px;
     margin-top: 12px;
     overflow: hidden;
+    visibility: hidden;
 }
+.progress-bar.active { visibility: visible; }
 .progress-bar .fill {
     height: 100%;
     background: #7af;
@@ -203,7 +228,8 @@ button:hover { background: #3a4a5a; }
         <div class="control-group">
             <label>Preset</label>
             <select id="presetSelect">
-                <option value="images/test1.png">Box Frame</option>
+                <option value="" hidden>Custom Upload</option>
+                <option value="images/test1.png" selected>Box Frame</option>
                 <option value="images/test2.png">Sphere</option>
                 <option value="images/test3.png">Ring</option>
                 <option value="images/test4.png">Pyramid</option>
@@ -211,11 +237,11 @@ button:hover { background: #3a4a5a; }
                 <option value="text">3D Text</option>
             </select>
         </div>
-        <div class="control-group" id="textGroup" style="display:none">
+        <div class="control-group" id="textGroup" hidden>
             <label>Text</label>
-            <input type="text" id="textInput" value="HELLO" style="width:100%;padding:8px 10px;background:#333;color:#ccc;border:1px solid #555;border-radius:4px;font-size:13px">
+            <input type="text" id="textInput" class="text-input" value="HELLO">
         </div>
-        <div class="control-group" id="fontGroup" style="display:none">
+        <div class="control-group" id="fontGroup" hidden>
             <label>Font</label>
             <select id="fontSelect">
                 <option value="Arial Black, sans-serif">Arial Black</option>
@@ -236,10 +262,13 @@ button:hover { background: #3a4a5a; }
         <h2>Stereogram</h2>
 
         <div class="control-group">
-            <label>Depth Intensity <span class="value" id="depthVal">0.30</span></label>
+            <label class="label-row">
+                Depth Intensity
+                <button id="autoDepthBtn" class="inline-btn" title="Auto-calibrate depth">Auto</button>
+                <span class="value" id="depthVal">0.30</span>
+            </label>
             <input type="range" id="depthSlider" min="0" max="1.0" step="0.01" value="0.3">
         </div>
-        <button id="autoDepthBtn">Auto Depth</button>
         <div class="control-group">
             <label>Repeat Count <span class="value" id="repeatVal">14</span></label>
             <input type="range" id="repeatSlider" min="8" max="30" step="1" value="14">
@@ -259,11 +288,11 @@ button:hover { background: #3a4a5a; }
         <label class="checkbox-group">
             <input type="checkbox" id="imageTintCheck"> Depth Shading
         </label>
-        <div class="control-group" id="imageTintGroup" style="display:none">
+        <div class="control-group" id="imageTintGroup" hidden>
             <label>Shading Strength <span class="value" id="imageTintVal">0.30</span></label>
             <input type="range" id="imageTintSlider" min="-1" max="1" step="0.05" value="0.3">
         </div>
-        <div class="control-group" id="edgeGroup" style="display:none">
+        <div class="control-group" id="edgeGroup" hidden>
             <label>Edge Strength <span class="value" id="edgeVal">0.50</span></label>
             <input type="range" id="edgeSlider" min="0.05" max="1" step="0.05" value="0.5">
         </div>
@@ -299,13 +328,14 @@ button:hover { background: #3a4a5a; }
             <input type="range" id="contrastSlider" min="0" max="2" step="0.05" value="1">
         </div>
         <div class="control-group" id="seedGroup">
-            <label>Seed
-                <label class="checkbox-group" style="font-size:11px;gap:4px">
+            <label class="label-row">
+                Seed
+                <label class="checkbox-group" style="font-size:11px;gap:4px;margin-left:auto">
                     <input type="checkbox" id="seedLockCheck"> Lock
                 </label>
             </label>
             <div style="display:flex;gap:4px">
-                <input type="number" id="seedInput" min="0" max="999999" value="0" style="flex:1;min-width:0;padding:8px 10px;background:#333;color:#ccc;border:1px solid #555;border-radius:4px;font-size:13px;font-family:monospace">
+                <input type="number" id="seedInput" class="text-input" min="0" max="999999" value="0" style="flex:1;min-width:0;font-family:monospace">
                 <button id="seedRandomBtn" title="Randomize seed" style="width:auto;padding:8px 12px">🎲</button>
             </div>
         </div>
@@ -336,7 +366,7 @@ button:hover { background: #3a4a5a; }
         <button id="fullscreenBtn">Fullscreen</button>
         <button id="regenerateBtn">Regenerate</button>
         <button id="saveBtn">Save Image</button>
-        <button id="resetBtn">Reset Defaults</button>
+        <button id="resetBtn">Reset Sliders</button>
         <button onclick="window.open('https://github.com/KilledByAPixel/stereogram','_blank')">View on GitHub</button>
     </div>
 
@@ -346,8 +376,7 @@ button:hover { background: #3a4a5a; }
             <canvas id="depthCanvas"></canvas>
             <div class="drop-overlay" id="dropOverlay">Drop depth map image here</div>
         </div>
-        <div class="progress-bar"><div class="fill" id="progressFill"></div></div>
-        <div class="progress-text" id="progressText"></div>
+        <div class="progress-bar" id="progressBar"><div class="fill" id="progressFill"></div></div>
     </div>
 </div>
 
