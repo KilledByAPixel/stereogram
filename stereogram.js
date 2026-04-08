@@ -586,7 +586,7 @@ function updatePatternControls() {
     const noisy = ['gradient', 'warped', 'pixelated'].includes(patternSelect.value);
     for (const g of [hueVarGroup, satGroup, contrastGroup])
         g.classList.toggle('disabled', !noisy);
-    patternUploadGroup.style.display = patternSelect.value === 'custom' ? '' : 'none';
+    scaleGroup.classList.toggle('disabled', patternSelect.value === 'custom');
 }
 
 patternSelect.addEventListener('change', () => {
@@ -643,7 +643,6 @@ resetBtn.addEventListener('click', () => {
         const sel = [...el.options].findIndex(o => o.hasAttribute('selected'));
         el.selectedIndex = sel >= 0 ? sel : 0;
     });
-    patternUploadGroup.style.display = 'none';
     [canvasW, canvasH] = getResolution();
     presetSelect.dispatchEvent(new Event('change'));
 });
@@ -671,6 +670,8 @@ patternInput.addEventListener('change', async (e) => {
     if (!file) return;
     const img = await loadImage(URL.createObjectURL(file));
     loadPatternImage(img);
+    patternSelect.value = 'custom';
+    updatePatternControls();
     startRender();
 });
 
