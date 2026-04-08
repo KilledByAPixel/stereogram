@@ -381,8 +381,9 @@ function startRender() {
     // inversely with the slider — same control semantics as other patterns.
     if (params.pattern === 'dots') {
         const repeatSize = Math.round(w / params.repeatCount);
-        // Higher Texture Scale → bigger dots (inverse of cells-per-repeat).
-        const cells = Math.max(2, Math.min(256, Math.round(60 / params.textureWrapCount)));
+        // Cells per repeat scale linearly with Texture Scale, matching the
+        // "higher scale = finer features" direction of the noise patterns.
+        const cells = Math.max(2, Math.min(256, Math.round(params.textureWrapCount * 3)));
         dotPixelSize = repeatSize / cells;
         generateBlueNoiseTile(cells, seed || 1);
     }
