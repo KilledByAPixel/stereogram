@@ -594,7 +594,8 @@ dotsCheck.addEventListener('change', () => startRender());
 
 resolutionSelect.addEventListener('change', () => {
     [canvasW, canvasH] = getResolution();
-    if (currentImage) setHeightFromImage(currentImage);
+    if (presetSelect.value === 'text') generateTextDepth();
+    else if (currentImage) setHeightFromImage(currentImage);
     else generateSphere();
     startRender();
 });
@@ -634,6 +635,16 @@ resetBtn.addEventListener('click', () => {
 // FILE LOADING
 
 presetSelect.addEventListener('change', async () => {
+    const isText = presetSelect.value === 'text';
+    textGroup.style.display = isText ? '' : 'none';
+    fontGroup.style.display = isText ? '' : 'none';
+    if (isText) {
+        currentImage = null;
+        [canvasW, canvasH] = getResolution();
+        generateTextDepth();
+        startRender();
+        return;
+    }
     try {
         currentImage = await loadImage(presetSelect.value);
         [canvasW, canvasH] = getResolution();
@@ -642,6 +653,49 @@ presetSelect.addEventListener('change', async () => {
     } catch (e) {
         console.error(e);
     }
+});
+
+function generateTextDepth() {
+    const text = textInput.value || ' ';
+    const font = fontSelect.value;
+    offCanvas.width = canvasW;
+    offCanvas.height = canvasH;
+    offCtx.fillStyle = '#000';
+    offCtx.fillRect(0, 0, canvasW, canvasH);
+
+    // Binary-search font size to fit text within 90% of canvas dimensions.
+    const maxW = canvasW * 0.9;
+    const maxH = canvasH * 0.9;
+    let lo = 8, hi = canvasH * 2, size = 64;
+    for (let i = 0; i < 20; i++) {
+        size = (lo + hi) / 2;
+        offCtx.font = `${size}px ${font}`;
+        const m = offCtx.measureText(text);
+        const tw = m.width;
+        const th = (m.actualBoundingBoxAscent || size * 0.8) + (m.actualBoundingBoxDescent || size * 0.2);
+        if (tw > maxW || th > maxH) hi = size;
+        else lo = size;
+    }
+    offCtx.font = `${lo}px ${font}`;
+    offCtx.fillStyle = '#fff';
+    offCtx.textAlign = 'center';
+    offCtx.textBaseline = 'middle';
+    offCtx.fillText(text, canvasW / 2, canvasH / 2);
+
+    const data = offCtx.getImageData(0, 0, canvasW, canvasH).data;
+    heightData = new Float32Array(canvasW * canvasH);
+    for (let i = 0; i < data.length; i += 4)
+        heightData[i >> 2] = data[i] / 255;
+    heightDataRaw = new Float32Array(heightData);
+    blurHeightData(2);
+    setHeightFromArray();
+}
+
+textInput.addEventListener('input', () => {
+    if (presetSelect.value === 'text') { generateTextDepth(); startRender(); }
+});
+fontSelect.addEventListener('change', () => {
+    if (presetSelect.value === 'text') { generateTextDepth(); startRender(); }
 });
 
 fileInput.addEventListener('change', (e) => {
