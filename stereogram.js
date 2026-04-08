@@ -652,18 +652,21 @@ saveBtn.addEventListener('click', () => {
 resetBtn.addEventListener('click', () => {
     document.querySelectorAll('.sidebar input[type="range"]').forEach(el => {
         el.value = el.defaultValue;
-        el.dispatchEvent(new Event('input'));
+        const valEl = document.getElementById(el.id.replace('Slider', 'Val'));
+        if (valEl) valEl.textContent = parseFloat(el.value).toFixed(el.step.includes('.') ? 2 : 0);
     });
     document.querySelectorAll('.sidebar input[type="checkbox"]').forEach(el => {
         el.checked = el.defaultChecked;
-        el.dispatchEvent(new Event('change'));
     });
     document.querySelectorAll('.sidebar select').forEach(el => {
+        if (el === presetSelect || el === fontSelect) return;
         const sel = [...el.options].findIndex(o => o.hasAttribute('selected'));
         el.selectedIndex = sel >= 0 ? sel : 0;
     });
-    [canvasW, canvasH] = getResolution();
-    presetSelect.dispatchEvent(new Event('change'));
+    edgeGroup.style.display = edgeCheck.checked ? '' : 'none';
+    depthCanvas.style.display = showHeightCheck.checked ? 'block' : 'none';
+    updatePatternControls();
+    startRender();
 });
 
 ///////////////////////////////////////////////////////////////////////////////
