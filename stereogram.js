@@ -4,7 +4,6 @@
 // MATH UTILITIES
 
 const PI = Math.PI;
-const abs = (a) => a < 0 ? -a : a;
 const mod = (a, b=1) => ((a % b) + b) % b;
 const clamp = (v, min=0, max=1) => v < min ? min : v > max ? max : v;
 const smoothStep = (p) => p * p * (3 - 2 * p);
@@ -115,7 +114,6 @@ let heightData = null;
 let heightDataRaw = null;  // unblurred copy used for edge detection
 let canvasW = 1920, canvasH = 1080;
 
-let edgeMask = null;
 let patternImageData = null;
 let patternW = 0, patternH = 0;
 
@@ -142,7 +140,7 @@ const offCtx    = offCanvas.getContext('2d');
 
 function getResolution() {
     const [w, h] = resolutionSelect.value.split('x');
-    return [parseInt(w), parseInt(h)];
+    return [parseInt(w, 10), parseInt(h, 10)];
 }
 
 function getParams() {
@@ -233,9 +231,10 @@ function setHeightFromArray() {
     const imgData = depthCtx.createImageData(canvasW, canvasH);
     const px = imgData.data;
     for (let i = 0; i < heightData.length; i++) {
+        const j = i * 4;
         const v = heightData[i] * 255 | 0;
-        px[i * 4] = px[i * 4 + 1] = px[i * 4 + 2] = v;
-        px[i * 4 + 3] = 255;
+        px[j] = px[j + 1] = px[j + 2] = v;
+        px[j + 3] = 255;
     }
     depthCtx.putImageData(imgData, 0, 0);
 }
@@ -251,29 +250,6 @@ function generateSphere() {
         }
     heightDataRaw = new Float32Array(heightData);
     setHeightFromArray();
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// EDGE ENHANCEMENT
-
-function computeEdgeMask(src, w, h) {
-    const mask = new Float32Array(w * h);
-    for (let y = 1; y < h - 1; y++) {
-        for (let x = 1; x < w - 1; x++) {
-            const i = x + y * w;
-            // Sobel X
-            const gx =
-                -src[(x-1)+(y-1)*w] + src[(x+1)+(y-1)*w]
-              - 2*src[(x-1)+y*w]    + 2*src[(x+1)+y*w]
-                -src[(x-1)+(y+1)*w] + src[(x+1)+(y+1)*w];
-            // Sobel Y
-            const gy =
-                -src[(x-1)+(y-1)*w] - 2*src[x+(y-1)*w] - src[(x+1)+(y-1)*w]
-              +  src[(x-1)+(y+1)*w] + 2*src[x+(y+1)*w] + src[(x+1)+(y+1)*w];
-            mask[i] = Math.min(1, Math.sqrt(gx * gx + gy * gy) * 2);
-        }
-    }
-    return mask;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -337,7 +313,7 @@ function generateBlueNoiseTile(size, seed) {
 // Apply hue variance, saturation, and contrast to noise values [n3, n2, n].
 // n3 -> hue offset, n2 -> saturation, n -> lightness around 0.5.
 function shadeNoise(n3, n2, n, seed, hueVar, sat, contrast) {
-    const hue = Math.sin(n3) * hueVar + Math.tan(seed) % 1;
+    const hue = Math.sin(n3) * hueVar + (seed * 0.61803) % 1;
     const s = clamp(n2 * sat);
     const l = clamp(0.5 + (n - 0.5) * contrast);
     return hslToRgb(hue, s, l);
@@ -459,22 +435,20 @@ function drawDot(x, y, r) {
     mainCtx.stroke();
 }
 
-function renderScanline(y, w, params, seed, pixels) {
-    const { depthScale, textureWrapCount, repeatCount, pattern, invert, edgeEnhance, edgeStrength, imageTint, imageTintStrength } = params;
-    const useEdges = edgeEnhance && edgeStrength > 0;
-    const useTint = imageTint && imageTintStrength !== 0;
-    const repeatSize = Math.round(w / repeatCount);
-    const maxSep = repeatSize * depthScale;
-
-    // Read depth values for this row
-    const depth = new Float32Array(w);
+// Read one row of depth values, applying invert and NaN cleanup.
+function readDepthRow(src, y, w, invert) {
+    const out = new Float32Array(w);
     for (let i = 0; i < w; i++) {
-        let d = heightData[i + y * canvasW] || 0;
+        let d = src[i + y * canvasW] || 0;
         if (Number.isNaN(d)) d = 0;
-        depth[i] = invert ? 1 - clamp(d) : clamp(d);
+        out[i] = invert ? 1 - clamp(d) : clamp(d);
     }
+    return out;
+}
 
-    // Bidirectional propagation with subpixel gaps.
+// Bidirectional subpixel propagation. Returns the per-column averaged
+// source index (avg of left and right passes).
+function propagate(depth, w, repeatSize, maxSep) {
     const L = new Float32Array(w);
     const R = new Float32Array(w);
     for (let i = 0; i < w; i++) {
@@ -509,49 +483,23 @@ function renderScanline(y, w, params, seed, pixels) {
     }
     const avg = new Float32Array(w);
     for (let i = 0; i < w; i++) avg[i] = (L[i] + R[i]) / 2;
+    return avg;
+}
+
+function renderScanline(y, w, params, seed, pixels) {
+    const { depthScale, textureWrapCount, repeatCount, pattern, invert, edgeEnhance, edgeStrength, imageTint, imageTintStrength } = params;
+    const useEdges = edgeEnhance && edgeStrength > 0;
+    const useTint = imageTint && imageTintStrength !== 0;
+    const repeatSize = Math.round(w / repeatCount);
+    const maxSep = repeatSize * depthScale;
+
+    const depth = readDepthRow(heightData, y, w, invert);
+    const avg = propagate(depth, w, repeatSize, maxSep);
 
     let edgeAvg = avg;
     if (useEdges) {
-        const depthRaw = new Float32Array(w);
-        for (let i = 0; i < w; i++) {
-            let d = heightDataRaw[i + y * canvasW] || 0;
-            if (Number.isNaN(d)) d = 0;
-            depthRaw[i] = invert ? 1 - clamp(d) : clamp(d);
-        }
-        const Lr = new Float32Array(w);
-        const Rr = new Float32Array(w);
-        for (let i = 0; i < w; i++) {
-            let gap = repeatSize;
-            for (let j = 4; j--;) {
-                const m = Math.max(0, Math.min(w - 1, i - gap / 2 | 0));
-                gap = repeatSize - maxSep * depthCurve(depthRaw[m]);
-            }
-            const src = i - gap;
-            if (src < 0) Lr[i] = i;
-            else {
-                const lo = Math.min(i - 1, src | 0);
-                const hi = Math.min(i - 1, lo + 1);
-                const t = src - lo;
-                Lr[i] = (1 - t) * Lr[lo] + t * Lr[hi] + repeatSize;
-            }
-        }
-        for (let i = w - 1; i >= 0; i--) {
-            let gap = repeatSize;
-            for (let j = 4; j--;) {
-                const m = Math.max(0, Math.min(w - 1, i + gap / 2 | 0));
-                gap = repeatSize - maxSep * depthCurve(depthRaw[m]);
-            }
-            const src = i + gap;
-            if (src >= w) Rr[i] = i;
-            else {
-                const lo = Math.max(i + 1, src | 0);
-                const hi = Math.min(w - 1, lo + 1);
-                const t = src - lo;
-                Rr[i] = (1 - t) * Rr[lo] + t * Rr[hi] - repeatSize;
-            }
-        }
-        edgeAvg = new Float32Array(w);
-        for (let i = 0; i < w; i++) edgeAvg[i] = (Lr[i] + Rr[i]) / 2;
+        const depthRaw = readDepthRow(heightDataRaw, y, w, invert);
+        edgeAvg = propagate(depthRaw, w, repeatSize, maxSep);
     }
 
     // Texture coordinate mapping
