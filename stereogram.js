@@ -166,7 +166,15 @@ function loadImage(src) {
 function setHeightFromImage(image) {
     offCanvas.width = canvasW;
     offCanvas.height = canvasH;
-    offCtx.drawImage(image, 0, 0, image.width, image.height, 0, 0, canvasW, canvasH);
+    offCtx.fillStyle = '#000';
+    offCtx.fillRect(0, 0, canvasW, canvasH);
+    // Fit (contain) image into canvas without stretching.
+    const scale = Math.min(canvasW / image.width, canvasH / image.height);
+    const dw = image.width * scale;
+    const dh = image.height * scale;
+    const dx = (canvasW - dw) / 2;
+    const dy = (canvasH - dh) / 2;
+    offCtx.drawImage(image, 0, 0, image.width, image.height, dx, dy, dw, dh);
     const data = offCtx.getImageData(0, 0, canvasW, canvasH).data;
 
     heightData = new Float32Array(canvasW * canvasH);
