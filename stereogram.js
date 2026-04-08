@@ -709,7 +709,8 @@ autoDepthBtn.addEventListener('click', () => {
     // depthScale * worstTV < ~1 keeps the cumulative pattern stretch
     // within a single repeat-width window under one repeat. Safety factor
     // calibrated so a sphere lands near 0.4 depth intensity.
-    const recommended = Math.min(parseFloat(depthSlider.max), 0.37 / worstTV);
+    const maxRecommended = Math.min(0.37 / worstTV, .5);
+    const recommended = Math.min(parseFloat(depthSlider.max), maxRecommended);
     depthSlider.value = recommended.toFixed(2);
     depthSlider.dispatchEvent(new Event('input'));
 });
