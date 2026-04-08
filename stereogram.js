@@ -462,7 +462,7 @@ function drawDot(x, y, r) {
 function renderScanline(y, w, params, seed, pixels) {
     const { depthScale, textureWrapCount, repeatCount, pattern, invert, edgeEnhance, edgeStrength, imageTint, imageTintStrength } = params;
     const useEdges = edgeEnhance && edgeStrength > 0;
-    const useTint = imageTint && imageTintStrength > 0;
+    const useTint = imageTint && imageTintStrength !== 0;
     const repeatSize = Math.round(w / repeatCount);
     const maxSep = repeatSize * depthScale;
 
@@ -599,9 +599,16 @@ function renderScanline(y, w, params, seed, pixels) {
         if (useTint) {
             const d = tintRow[i];
             const m = (d * d * (3 - 2 * d)) * imageTintStrength;
-            r += (255 - r) * m;
-            g += (255 - g) * m;
-            b += (255 - b) * m;
+            // Positive m lerps toward white, negative toward black.
+            if (m >= 0) {
+                r += (255 - r) * m;
+                g += (255 - g) * m;
+                b += (255 - b) * m;
+            } else {
+                r += r * m;
+                g += g * m;
+                b += b * m;
+            }
         }
 
         if (useEdges) {
