@@ -176,7 +176,7 @@ function setHeightFromImage(image) {
     // Keep an unblurred copy for edge detection
     heightDataRaw = new Float32Array(heightData);
 
-    blurHeightData(2);
+    blurHeightData(1);
     setHeightFromArray();
 }
 
@@ -725,7 +725,7 @@ function generateTextDepth() {
     for (let i = 0; i < data.length; i += 4)
         heightData[i >> 2] = data[i] / 255;
     heightDataRaw = new Float32Array(heightData);
-    blurHeightData(2);
+    blurHeightData(1);
     setHeightFromArray();
 }
 
