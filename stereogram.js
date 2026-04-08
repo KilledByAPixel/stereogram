@@ -427,8 +427,8 @@ function renderScanline(y, w, params, seed, pixels) {
         if (src < 0) {
             L[i] = i;
         } else {
-            const lo = src | 0;
-            const hi = Math.min(w - 1, lo + 1);
+            const lo = Math.min(i - 1, src | 0);
+            const hi = Math.min(i - 1, lo + 1);
             const t = src - lo;
             L[i] = (1 - t) * L[lo] + t * L[hi] + repeatSize;
         }
@@ -444,7 +444,7 @@ function renderScanline(y, w, params, seed, pixels) {
         if (src >= w) {
             R[i] = i;
         } else {
-            const lo = src | 0;
+            const lo = Math.max(i + 1, src | 0);
             const hi = Math.min(w - 1, lo + 1);
             const t = src - lo;
             R[i] = (1 - t) * R[lo] + t * R[hi] - repeatSize;
@@ -478,8 +478,8 @@ function renderScanline(y, w, params, seed, pixels) {
             const src = i - gap;
             if (src < 0) Lr[i] = i;
             else {
-                const lo = src | 0;
-                const hi = Math.min(w - 1, lo + 1);
+                const lo = Math.min(i - 1, src | 0);
+                const hi = Math.min(i - 1, lo + 1);
                 const t = src - lo;
                 Lr[i] = (1 - t) * Lr[lo] + t * Lr[hi] + repeatSize;
             }
@@ -493,7 +493,7 @@ function renderScanline(y, w, params, seed, pixels) {
             const src = i + gap;
             if (src >= w) Rr[i] = i;
             else {
-                const lo = src | 0;
+                const lo = Math.max(i + 1, src | 0);
                 const hi = Math.min(w - 1, lo + 1);
                 const t = src - lo;
                 Rr[i] = (1 - t) * Rr[lo] + t * Rr[hi] - repeatSize;
