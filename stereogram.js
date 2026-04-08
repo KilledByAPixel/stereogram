@@ -602,6 +602,41 @@ resolutionSelect.addEventListener('change', () => {
 
 regenerateBtn.addEventListener('click', () => startRender());
 
+autoDepthBtn.addEventListener('click', () => {
+    if (!heightData) return;
+    const invert = invertCheck.checked;
+    // Pattern echo appears when depth changes significantly across a
+    // distance equal to the pattern repeat width: a stretch/compress of
+    // the pattern over that span shifts it into a misaligned phase.
+    // So the cap is determined by the max depth *range* found in any
+    // horizontal window of `repeatSize` pixels.
+    const repeatCount = parseInt(repeatSlider.value);
+    const repeatSize = Math.round(canvasW / repeatCount);
+    // Precompute per-row total-variation prefix sums so window TV is O(1).
+    let worstTV = 0;
+    for (let y = 0; y < canvasH; y += 2) {
+        const row = y * canvasW;
+        const tv = new Float32Array(canvasW);
+        for (let x = 1; x < canvasW; x++) {
+            let a = heightData[row + x - 1];
+            let b = heightData[row + x];
+            if (invert) { a = 1 - a; b = 1 - b; }
+            tv[x] = tv[x - 1] + Math.abs(b - a);
+        }
+        for (let x = 0; x + repeatSize < canvasW; x += 4) {
+            const t = tv[x + repeatSize] - tv[x];
+            if (t > worstTV) worstTV = t;
+        }
+    }
+    if (worstTV <= 0) return;
+    // depthScale * worstTV < ~1 keeps the cumulative pattern stretch
+    // within a single repeat-width window under one repeat. Safety factor
+    // 0.4 calibrated so a sphere lands near 0.4 depth intensity.
+    const recommended = Math.min(parseFloat(depthSlider.max), 0.35 / worstTV);
+    depthSlider.value = recommended.toFixed(2);
+    depthSlider.dispatchEvent(new Event('input'));
+});
+
 fullscreenBtn.addEventListener('click', () => {
     if (document.fullscreenElement) document.exitFullscreen();
     else mainCanvas.requestFullscreen();
