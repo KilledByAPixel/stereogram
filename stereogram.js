@@ -513,16 +513,14 @@ function renderScanline(y, w, params, seed, pixels) {
     const scale = repeatSize / p;
     const texY = y / scale;
 
-    // Per-screen-column shading row: seeded with depth, then propagated
-    // to columns ±repeatSize away with a decay so echoes fade off rapidly.
-    // The strongest values land where the actual depth lives (the two
-    // central images the eyes converge on); flanking repeats show faded
-    // copies that vanish a few periods out.
+    // Seed shading from depth, then echo it ±repeatSize per step with a
+    // decay so the shape lands strongest on the central pair of images
+    // (where the eyes converge) and fades through a couple flanking tiles.
     let tintRow = null;
     if (useTint) {
-        const decay = 0.45;
+        const decay = 0.6;
         tintRow = new Float32Array(w);
-        for (let i = 0; i < w; i++) tintRow[i] = clamp(depth[i]);
+        for (let i = 0; i < w; i++) tintRow[i] = depth[i];
         for (let i = repeatSize; i < w; i++) {
             const echo = tintRow[i - repeatSize] * decay;
             if (echo > tintRow[i]) tintRow[i] = echo;
