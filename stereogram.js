@@ -119,9 +119,6 @@ let edgeMask = null;
 let patternImageData = null;
 let patternW = 0, patternH = 0;
 
-// Original RGB of the loaded depth image (for depth-biased image tinting).
-let sourceImageRGB = null;
-
 // Precomputed blue-noise tile (high-pass white noise) for the dots pattern.
 let blueNoiseTile = null;
 let blueNoiseTileSize = 0;
@@ -192,14 +189,8 @@ function setHeightFromImage(image) {
     const data = offCtx.getImageData(0, 0, canvasW, canvasH).data;
 
     heightData = new Float32Array(canvasW * canvasH);
-    sourceImageRGB = new Uint8ClampedArray(canvasW * canvasH * 3);
-    for (let i = 0; i < data.length; i += 4) {
-        const j = i >> 2;
-        heightData[j] = data[i] / 255;
-        sourceImageRGB[j * 3]     = data[i];
-        sourceImageRGB[j * 3 + 1] = data[i + 1];
-        sourceImageRGB[j * 3 + 2] = data[i + 2];
-    }
+    for (let i = 0; i < data.length; i += 4)
+        heightData[i >> 2] = data[i] / 255;
 
     // Keep an unblurred copy for edge detection
     heightDataRaw = new Float32Array(heightData);
@@ -251,7 +242,6 @@ function setHeightFromArray() {
 
 function generateSphere() {
     [canvasW, canvasH] = getResolution();
-    sourceImageRGB = null;
     heightData = new Float32Array(canvasW * canvasH);
     const r = canvasH * 0.45;
     for (let y = 0; y < canvasH; y++)
@@ -472,7 +462,7 @@ function drawDot(x, y, r) {
 function renderScanline(y, w, params, seed, pixels) {
     const { depthScale, textureWrapCount, repeatCount, pattern, invert, edgeEnhance, edgeStrength, imageTint, imageTintStrength } = params;
     const useEdges = edgeEnhance && edgeStrength > 0;
-    const useTint = imageTint && imageTintStrength > 0 && sourceImageRGB;
+    const useTint = imageTint && imageTintStrength > 0;
     const repeatSize = Math.round(w / repeatCount);
     const maxSep = repeatSize * depthScale;
 
@@ -569,6 +559,26 @@ function renderScanline(y, w, params, seed, pixels) {
     const scale = repeatSize / p;
     const texY = y / scale;
 
+    // Per-screen-column shading row: seeded with depth, then propagated
+    // to columns ±repeatSize away with a decay so echoes fade off rapidly.
+    // The strongest values land where the actual depth lives (the two
+    // central images the eyes converge on); flanking repeats show faded
+    // copies that vanish a few periods out.
+    let tintRow = null;
+    if (useTint) {
+        const decay = 0.45;
+        tintRow = new Float32Array(w);
+        for (let i = 0; i < w; i++) tintRow[i] = clamp(depth[i]);
+        for (let i = repeatSize; i < w; i++) {
+            const echo = tintRow[i - repeatSize] * decay;
+            if (echo > tintRow[i]) tintRow[i] = echo;
+        }
+        for (let i = w - 1 - repeatSize; i >= 0; i--) {
+            const echo = tintRow[i + repeatSize] * decay;
+            if (echo > tintRow[i]) tintRow[i] = echo;
+        }
+    }
+
     for (let i = 0; i < w; i++) {
         const texX = ((avg[i] % repeatSize) + repeatSize) % repeatSize;
 
@@ -587,14 +597,11 @@ function renderScanline(y, w, params, seed, pixels) {
         }
 
         if (useTint) {
-            // Smoothstep on depth: far stays pure noise (easy fusion),
-            // near picks up source-image color.
-            const d = clamp(depth[i]);
+            const d = tintRow[i];
             const m = (d * d * (3 - 2 * d)) * imageTintStrength;
-            const sIdx = (y * w + i) * 3;
-            r = r * (1 - m) + sourceImageRGB[sIdx]     * m;
-            g = g * (1 - m) + sourceImageRGB[sIdx + 1] * m;
-            b = b * (1 - m) + sourceImageRGB[sIdx + 2] * m;
+            r += (255 - r) * m;
+            g += (255 - g) * m;
+            b += (255 - b) * m;
         }
 
         if (useEdges) {
@@ -831,7 +838,6 @@ function generateTextDepth() {
     offCtx.fillText(text, canvasW / 2, canvasH / 2);
 
     const data = offCtx.getImageData(0, 0, canvasW, canvasH).data;
-    sourceImageRGB = null;
     heightData = new Float32Array(canvasW * canvasH);
     for (let i = 0; i < data.length; i += 4)
         heightData[i >> 2] = data[i] / 255;
