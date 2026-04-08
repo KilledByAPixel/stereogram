@@ -144,6 +144,7 @@ function getParams() {
         pattern:          patternSelect.value,
         invert:           invertCheck.checked,
         edgeEnhance:      edgeCheck.checked,
+        unionFind:        unionFindCheck.checked,
         edgeStrength:     parseFloat(edgeSlider.value),
         hueVariance:      parseFloat(hueVarSlider.value),
         saturation:       parseFloat(satSlider.value),
@@ -411,97 +412,111 @@ function renderScanline(y, w, params, seed, pixels) {
         depth[i] = invert ? 1 - clamp(d) : clamp(d);
     }
 
-    // Bidirectional propagation of texture coordinates with subpixel
-    // gaps to avoid quantization artifacts (visible as noise on sharp
-    // patterns like checkerboard).
-    const L = new Float32Array(w);
-    const R = new Float32Array(w);
-
-    for (let i = 0; i < w; i++) {
-        let gap = repeatSize;
-        for (let j = 4; j--;) {
-            const m = Math.max(0, Math.min(w - 1, i - gap / 2 | 0));
-            gap = repeatSize - maxSep * depth[m];
-        }
-        const src = i - gap;
-        if (src < 0) {
-            L[i] = i;
-        } else {
-            const lo = Math.min(i - 1, src | 0);
-            const hi = Math.min(i - 1, lo + 1);
-            const t = src - lo;
-            L[i] = (1 - t) * L[lo] + t * L[hi] + repeatSize;
-        }
-    }
-
-    for (let i = w - 1; i >= 0; i--) {
-        let gap = repeatSize;
-        for (let j = 4; j--;) {
-            const m = Math.max(0, Math.min(w - 1, i + gap / 2 | 0));
-            gap = repeatSize - maxSep * depth[m];
-        }
-        const src = i + gap;
-        if (src >= w) {
-            R[i] = i;
-        } else {
-            const lo = Math.max(i + 1, src | 0);
-            const hi = Math.min(w - 1, lo + 1);
-            const t = src - lo;
-            R[i] = (1 - t) * R[lo] + t * R[hi] - repeatSize;
-        }
-    }
-
-    // Average the two passes
     const avg = new Float32Array(w);
-    for (let i = 0; i < w; i++)
-        avg[i] = (L[i] + R[i]) / 2;
+    let edgeAvg;
 
-    // For edge detection, run a second propagation on the raw (unblurred)
-    // depth so the texture coordinate has sharp discontinuities at depth
-    // boundaries. The blurred version smears them out.
-    let edgeAvg = avg;
-    if (useEdges) {
-        const depthRaw = new Float32Array(w);
-        for (let i = 0; i < w; i++) {
-            let d = heightDataRaw[i + y * canvasW] || 0;
-            if (Number.isNaN(d)) d = 0;
-            depthRaw[i] = invert ? 1 - clamp(d) : clamp(d);
+    if (params.unionFind) {
+        // Union-find forward mapping (Thimbleby/Inglis/Witten).
+        // Each x unions the two pixels separated by its disparity, so
+        // each equivalence class renders as a single texture coord.
+        const parent = new Int32Array(w);
+        for (let i = 0; i < w; i++) parent[i] = i;
+        const find = (a) => {
+            while (parent[a] !== a) {
+                parent[a] = parent[parent[a]];
+                a = parent[a];
+            }
+            return a;
+        };
+        for (let x = 0; x < w; x++) {
+            const sep = Math.round(repeatSize - maxSep * depth[x]);
+            const left = x - (sep >> 1);
+            const right = left + sep;
+            if (left < 0 || right >= w) continue;
+            const ra = find(left), rb = find(right);
+            if (ra !== rb) parent[ra < rb ? rb : ra] = ra < rb ? ra : rb;
         }
-        const Lr = new Float32Array(w);
-        const Rr = new Float32Array(w);
+        for (let i = 0; i < w; i++) avg[i] = find(i);
+        edgeAvg = avg;
+    } else {
+        // Bidirectional propagation with subpixel gaps.
+        const L = new Float32Array(w);
+        const R = new Float32Array(w);
         for (let i = 0; i < w; i++) {
             let gap = repeatSize;
             for (let j = 4; j--;) {
                 const m = Math.max(0, Math.min(w - 1, i - gap / 2 | 0));
-                gap = repeatSize - maxSep * depthRaw[m];
+                gap = repeatSize - maxSep * depth[m];
             }
             const src = i - gap;
-            if (src < 0) Lr[i] = i;
+            if (src < 0) L[i] = i;
             else {
                 const lo = Math.min(i - 1, src | 0);
                 const hi = Math.min(i - 1, lo + 1);
                 const t = src - lo;
-                Lr[i] = (1 - t) * Lr[lo] + t * Lr[hi] + repeatSize;
+                L[i] = (1 - t) * L[lo] + t * L[hi] + repeatSize;
             }
         }
         for (let i = w - 1; i >= 0; i--) {
             let gap = repeatSize;
             for (let j = 4; j--;) {
                 const m = Math.max(0, Math.min(w - 1, i + gap / 2 | 0));
-                gap = repeatSize - maxSep * depthRaw[m];
+                gap = repeatSize - maxSep * depth[m];
             }
             const src = i + gap;
-            if (src >= w) Rr[i] = i;
+            if (src >= w) R[i] = i;
             else {
                 const lo = Math.max(i + 1, src | 0);
                 const hi = Math.min(w - 1, lo + 1);
                 const t = src - lo;
-                Rr[i] = (1 - t) * Rr[lo] + t * Rr[hi] - repeatSize;
+                R[i] = (1 - t) * R[lo] + t * R[hi] - repeatSize;
             }
         }
-        edgeAvg = new Float32Array(w);
-        for (let i = 0; i < w; i++)
-            edgeAvg[i] = (Lr[i] + Rr[i]) / 2;
+        for (let i = 0; i < w; i++) avg[i] = (L[i] + R[i]) / 2;
+
+        edgeAvg = avg;
+        if (useEdges) {
+            const depthRaw = new Float32Array(w);
+            for (let i = 0; i < w; i++) {
+                let d = heightDataRaw[i + y * canvasW] || 0;
+                if (Number.isNaN(d)) d = 0;
+                depthRaw[i] = invert ? 1 - clamp(d) : clamp(d);
+            }
+            const Lr = new Float32Array(w);
+            const Rr = new Float32Array(w);
+            for (let i = 0; i < w; i++) {
+                let gap = repeatSize;
+                for (let j = 4; j--;) {
+                    const m = Math.max(0, Math.min(w - 1, i - gap / 2 | 0));
+                    gap = repeatSize - maxSep * depthRaw[m];
+                }
+                const src = i - gap;
+                if (src < 0) Lr[i] = i;
+                else {
+                    const lo = Math.min(i - 1, src | 0);
+                    const hi = Math.min(i - 1, lo + 1);
+                    const t = src - lo;
+                    Lr[i] = (1 - t) * Lr[lo] + t * Lr[hi] + repeatSize;
+                }
+            }
+            for (let i = w - 1; i >= 0; i--) {
+                let gap = repeatSize;
+                for (let j = 4; j--;) {
+                    const m = Math.max(0, Math.min(w - 1, i + gap / 2 | 0));
+                    gap = repeatSize - maxSep * depthRaw[m];
+                }
+                const src = i + gap;
+                if (src >= w) Rr[i] = i;
+                else {
+                    const lo = Math.max(i + 1, src | 0);
+                    const hi = Math.min(w - 1, lo + 1);
+                    const t = src - lo;
+                    Rr[i] = (1 - t) * Rr[lo] + t * Rr[hi] - repeatSize;
+                }
+            }
+            edgeAvg = new Float32Array(w);
+            for (let i = 0; i < w; i++) edgeAvg[i] = (Lr[i] + Rr[i]) / 2;
+        }
     }
 
     // Texture coordinate mapping
@@ -519,10 +534,6 @@ function renderScanline(y, w, params, seed, pixels) {
             [r, g, b] = getPatternColor(pattern, texX / scale, texY, p, seed, params);
         }
 
-        // Edge enhancement: detect texture coordinate discontinuities.
-        // When depth is flat, avg[i+1]-avg[i] == 1; deviations from 1
-        // indicate depth changes. This naturally aligns for both eyes
-        // since both pixels in a stereo pair share the same gradient.
         if (useEdges) {
             let maxEdge = 0;
             for (let d = 1; d <= 3; d++) {
@@ -608,6 +619,7 @@ showHeightCheck.addEventListener('change', () => {
 });
 
 dotsCheck.addEventListener('change', () => startRender());
+unionFindCheck.addEventListener('change', () => startRender());
 
 resolutionSelect.addEventListener('change', () => {
     [canvasW, canvasH] = getResolution();
