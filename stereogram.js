@@ -9,6 +9,11 @@ const mod = (a, b=1) => ((a % b) + b) % b;
 const clamp = (v, min=0, max=1) => v < min ? min : v > max ? max : v;
 const smoothStep = (p) => p * p * (3 - 2 * p);
 
+// Nonlinear depth response: more separation gain near the viewer (d → 1)
+// where vergence sensitivity is highest. f(0)=0, f(1)=1; k=0 → linear.
+const DEPTH_CURVE_K = 1.5;
+const depthCurve = (d) => d * (1 + DEPTH_CURVE_K) / (1 + DEPTH_CURVE_K * d);
+
 class Random {
     constructor(seed) { this.seed = seed | 0; }
     float(a=1, b=0) {
@@ -114,6 +119,13 @@ let edgeMask = null;
 let patternImageData = null;
 let patternW = 0, patternH = 0;
 
+// Original RGB of the loaded depth image (for depth-biased image tinting).
+let sourceImageRGB = null;
+
+// Precomputed blue-noise tile (high-pass white noise) for the dots pattern.
+let blueNoiseTile = null;
+let blueNoiseTileSize = 0;
+
 ///////////////////////////////////////////////////////////////////////////////
 // DOM REFERENCES
 
@@ -145,6 +157,8 @@ function getParams() {
         invert:           invertCheck.checked,
         edgeEnhance:      edgeCheck.checked,
         edgeStrength:     parseFloat(edgeSlider.value),
+        imageTint:        imageTintCheck.checked,
+        imageTintStrength: parseFloat(imageTintSlider.value),
         hueVariance:      parseFloat(hueVarSlider.value),
         saturation:       parseFloat(satSlider.value),
         contrast:         parseFloat(contrastSlider.value),
@@ -178,8 +192,14 @@ function setHeightFromImage(image) {
     const data = offCtx.getImageData(0, 0, canvasW, canvasH).data;
 
     heightData = new Float32Array(canvasW * canvasH);
-    for (let i = 0; i < data.length; i += 4)
-        heightData[i >> 2] = data[i] / 255;
+    sourceImageRGB = new Uint8ClampedArray(canvasW * canvasH * 3);
+    for (let i = 0; i < data.length; i += 4) {
+        const j = i >> 2;
+        heightData[j] = data[i] / 255;
+        sourceImageRGB[j * 3]     = data[i];
+        sourceImageRGB[j * 3 + 1] = data[i + 1];
+        sourceImageRGB[j * 3 + 2] = data[i + 2];
+    }
 
     // Keep an unblurred copy for edge detection
     heightDataRaw = new Float32Array(heightData);
@@ -231,6 +251,7 @@ function setHeightFromArray() {
 
 function generateSphere() {
     [canvasW, canvasH] = getResolution();
+    sourceImageRGB = null;
     heightData = new Float32Array(canvasW * canvasH);
     const r = canvasH * 0.45;
     for (let y = 0; y < canvasH; y++)
@@ -287,6 +308,40 @@ function samplePattern(x, y) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// BLUE NOISE
+
+// Build a tileable blue-noise (high-pass white-noise) array. Blue-noise dot
+// patterns fuse better than white noise: low-frequency clumps are removed,
+// so the eye doesn't latch onto false correspondences between repeats.
+function generateBlueNoiseTile(size, seed) {
+    const N = size | 0;
+    const r = new Random(seed);
+    const white = new Float32Array(N * N);
+    for (let i = 0; i < N * N; i++) white[i] = r.float();
+    const out = new Float32Array(N * N);
+    let mn = Infinity, mx = -Infinity;
+    for (let y = 0; y < N; y++) {
+        for (let x = 0; x < N; x++) {
+            // 3x3 wrapped average
+            let s = 0;
+            for (let dy = -1; dy <= 1; dy++)
+                for (let dx = -1; dx <= 1; dx++)
+                    s += white[((y + dy + N) % N) * N + (x + dx + N) % N];
+            const v = white[y * N + x] - s / 9;
+            out[y * N + x] = v;
+            if (v < mn) mn = v;
+            if (v > mx) mx = v;
+        }
+    }
+    const range = mx - mn || 1;
+    // Threshold to binary so dots stay crisp; the high-pass step ensures
+    // black/white pixels are distributed as blue noise rather than clumped.
+    for (let i = 0; i < N * N; i++) out[i] = (out[i] - mn) / range > 0.5 ? 1 : 0;
+    blueNoiseTile = out;
+    blueNoiseTileSize = N;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // PATTERN COLORS
 
 // Apply hue variance, saturation, and contrast to noise values [n3, n2, n].
@@ -301,11 +356,6 @@ function shadeNoise(n3, n2, n, seed, hueVar, sat, contrast) {
 function getPatternColor(pattern, X, Y, p, seed, params) {
     const { hueVariance, saturation, contrast } = params;
     switch (pattern) {
-        case 'dots': {
-            const rand = new Random(((X * 8 | 0) + (Y * 8 | 0) * 9999 + seed) | 0);
-            const v = rand.float(255) | 0;
-            return [v, v, v];
-        }
         case 'checkerboard': {
             // Force an even number of cells per repeat for seamless wrap.
             const N = Math.max(2, Math.round(params.textureWrapCount / 8) * 2);
@@ -356,6 +406,14 @@ function startRender() {
     } else {
         seed = new Random(Date.now()).int(1e6);
         seedInput.value = seed;
+    }
+
+    // Precompute blue-noise tile sized to one full stereogram repeat
+    // so it wraps seamlessly in pixel space.
+    if (params.pattern === 'dots') {
+        const repeatSize = Math.round(w / params.repeatCount);
+        const N = Math.min(256, Math.max(8, repeatSize));
+        generateBlueNoiseTile(N, seed || 1);
     }
 
     mainCanvas.width = w;
@@ -412,8 +470,9 @@ function drawDot(x, y, r) {
 }
 
 function renderScanline(y, w, params, seed, pixels) {
-    const { depthScale, textureWrapCount, repeatCount, pattern, invert, edgeEnhance, edgeStrength } = params;
+    const { depthScale, textureWrapCount, repeatCount, pattern, invert, edgeEnhance, edgeStrength, imageTint, imageTintStrength } = params;
     const useEdges = edgeEnhance && edgeStrength > 0;
+    const useTint = imageTint && imageTintStrength > 0 && sourceImageRGB;
     const repeatSize = Math.round(w / repeatCount);
     const maxSep = repeatSize * depthScale;
 
@@ -432,7 +491,7 @@ function renderScanline(y, w, params, seed, pixels) {
         let gap = repeatSize;
         for (let j = 4; j--;) {
             const m = Math.max(0, Math.min(w - 1, i - gap / 2 | 0));
-            gap = repeatSize - maxSep * depth[m];
+            gap = repeatSize - maxSep * depthCurve(depth[m]);
         }
         const src = i - gap;
         if (src < 0) L[i] = i;
@@ -447,7 +506,7 @@ function renderScanline(y, w, params, seed, pixels) {
         let gap = repeatSize;
         for (let j = 4; j--;) {
             const m = Math.max(0, Math.min(w - 1, i + gap / 2 | 0));
-            gap = repeatSize - maxSep * depth[m];
+            gap = repeatSize - maxSep * depthCurve(depth[m]);
         }
         const src = i + gap;
         if (src >= w) R[i] = i;
@@ -475,7 +534,7 @@ function renderScanline(y, w, params, seed, pixels) {
             let gap = repeatSize;
             for (let j = 4; j--;) {
                 const m = Math.max(0, Math.min(w - 1, i - gap / 2 | 0));
-                gap = repeatSize - maxSep * depthRaw[m];
+                gap = repeatSize - maxSep * depthCurve(depthRaw[m]);
             }
             const src = i - gap;
             if (src < 0) Lr[i] = i;
@@ -490,7 +549,7 @@ function renderScanline(y, w, params, seed, pixels) {
             let gap = repeatSize;
             for (let j = 4; j--;) {
                 const m = Math.max(0, Math.min(w - 1, i + gap / 2 | 0));
-                gap = repeatSize - maxSep * depthRaw[m];
+                gap = repeatSize - maxSep * depthCurve(depthRaw[m]);
             }
             const src = i + gap;
             if (src >= w) Rr[i] = i;
@@ -516,8 +575,26 @@ function renderScanline(y, w, params, seed, pixels) {
         let r, g, b;
         if (pattern === 'custom') {
             [r, g, b] = samplePattern(texX / repeatSize * patternW, y / repeatSize * patternW);
+        } else if (pattern === 'dots') {
+            // Sample blue-noise tile directly in pixel space.
+            const N = blueNoiseTileSize;
+            const tx = ((texX | 0) % N + N) % N;
+            const ty = ((y | 0) % N + N) % N;
+            const v = blueNoiseTile[ty * N + tx] * 255 | 0;
+            r = g = b = v;
         } else {
             [r, g, b] = getPatternColor(pattern, texX / scale, texY, p, seed, params);
+        }
+
+        if (useTint) {
+            // Smoothstep on depth: far stays pure noise (easy fusion),
+            // near picks up source-image color.
+            const d = clamp(depth[i]);
+            const m = (d * d * (3 - 2 * d)) * imageTintStrength;
+            const sIdx = (y * w + i) * 3;
+            r = r * (1 - m) + sourceImageRGB[sIdx]     * m;
+            g = g * (1 - m) + sourceImageRGB[sIdx + 1] * m;
+            b = b * (1 - m) + sourceImageRGB[sIdx + 2] * m;
         }
 
         if (useEdges) {
@@ -583,7 +660,7 @@ function updatePatternControls() {
     const noisy = ['gradient', 'warped', 'pixelated'].includes(patternSelect.value);
     for (const g of [hueVarGroup, satGroup, contrastGroup])
         g.classList.toggle('disabled', !noisy);
-    scaleGroup.classList.toggle('disabled', patternSelect.value === 'custom');
+    scaleGroup.classList.toggle('disabled', ['custom', 'dots'].includes(patternSelect.value));
     const seedless = ['checkerboard', 'custom'].includes(patternSelect.value);
     seedGroup.classList.toggle('disabled', seedless);
 }
@@ -611,6 +688,12 @@ edgeCheck.addEventListener('change', () => {
     startRender();
 });
 setupSlider('edgeSlider', 'edgeVal', 1);
+
+imageTintCheck.addEventListener('change', () => {
+    imageTintGroup.style.display = imageTintCheck.checked ? '' : 'none';
+    startRender();
+});
+setupSlider('imageTintSlider', 'imageTintVal');
 
 showHeightCheck.addEventListener('change', () => {
     depthCanvas.style.display = showHeightCheck.checked ? 'block' : 'none';
@@ -690,6 +773,7 @@ resetBtn.addEventListener('click', () => {
         el.selectedIndex = sel >= 0 ? sel : 0;
     });
     edgeGroup.style.display = edgeCheck.checked ? '' : 'none';
+    imageTintGroup.style.display = imageTintCheck.checked ? '' : 'none';
     depthCanvas.style.display = showHeightCheck.checked ? 'block' : 'none';
     updatePatternControls();
     startRender();
@@ -747,6 +831,7 @@ function generateTextDepth() {
     offCtx.fillText(text, canvasW / 2, canvasH / 2);
 
     const data = offCtx.getImageData(0, 0, canvasW, canvasH).data;
+    sourceImageRGB = null;
     heightData = new Float32Array(canvasW * canvasH);
     for (let i = 0; i < data.length; i += 4)
         heightData[i >> 2] = data[i] / 255;
