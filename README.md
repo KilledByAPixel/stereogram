@@ -1,6 +1,6 @@
 # Stereogram Generator
 
-A browser based tool for generating 3D autostereograms from depth maps.
+A browser-based tool for generating 3D autostereograms (Magic Eye style images) from depth maps. Pure HTML/JS, no build step, no dependencies.
 
 ![Stereogram Screenshot 1](images/example1.png)
 
@@ -8,16 +8,21 @@ A browser based tool for generating 3D autostereograms from depth maps.
 
 ## Features
 
-- Load depth maps from presets or upload your own
-- Multiple pattern styles or use a custom image
-- Adjustable depth intensity, repeat count, and texture scale
-- Invert depth toggle
+- **Depth sources** — built-in presets (box, sphere, ring, pyramid, waves), 3D text with selectable font, or upload your own grayscale depth map (drag-and-drop supported)
+- **Pattern styles** — gradient noise, warped noise, pixelated noise, random dots, checkerboard, or upload a custom tileable image
+- **Color controls** — hue variance, saturation, and contrast for procedural patterns
+- **Depth controls** — adjustable depth intensity, repeat count, invert toggle, and an **Auto Depth** button that picks the strongest setting that won't produce ghosting
+- **Edge enhancement** — optional Sobel-based outlines that darken silhouettes to make shapes pop
+- **Convergence dots** — optional alignment guides above the image to help your eyes lock in
+- **Output** — render at 720p up to 4K, save as PNG, or view fullscreen
+- **Live depth preview** — toggle to overlay the source depth map
 
 ## Usage
 
-Load a grayscale depth map by selecting a preset or dropping your own file. Adjust the controls in the sidebar and click Regenerate for a new random seed.
-
-To view the hidden 3D image, use the **parallel viewing method**: relax your eyes and look *through* the screen as if focusing on something far behind it. The repeating pattern will shift and a 3D shape will emerge.
+1. Pick a depth preset, type some 3D text, or drag your own grayscale image onto the canvas (white = near, black = far).
+2. Tweak the sliders. Click **Auto Depth** if you're not sure where to start.
+3. Click **Regenerate** to roll a new random pattern seed.
+4. View with the **parallel viewing method**: relax your eyes and look *through* the screen as if focusing on something far behind it. The repeating pattern will shift and a 3D shape will emerge. The convergence dots help — when you see three dots instead of two, you're aligned.
 
 ## Examples
 

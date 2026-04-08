@@ -350,7 +350,13 @@ function startRender() {
     if (params.pattern === 'custom' && !patternImageData) return;
 
     const w = canvasW, h = canvasH;
-    const seed = new Random(Date.now()).int(1e6);
+    let seed;
+    if (seedLockCheck.checked) {
+        seed = parseInt(seedInput.value) | 0;
+    } else {
+        seed = new Random(Date.now()).int(1e6);
+        seedInput.value = seed;
+    }
 
     mainCanvas.width = w;
     mainCanvas.height = h;
@@ -578,7 +584,14 @@ function updatePatternControls() {
     for (const g of [hueVarGroup, satGroup, contrastGroup])
         g.classList.toggle('disabled', !noisy);
     scaleGroup.classList.toggle('disabled', patternSelect.value === 'custom');
+    const seedless = ['checkerboard', 'custom'].includes(patternSelect.value);
+    seedGroup.classList.toggle('disabled', seedless);
 }
+
+seedInput.addEventListener('input', () => { if (seedLockCheck.checked) debouncedRender(); });
+seedLockCheck.addEventListener('change', () => {
+    if (!seedLockCheck.checked) startRender();
+});
 
 patternSelect.addEventListener('change', () => {
     updatePatternControls();
