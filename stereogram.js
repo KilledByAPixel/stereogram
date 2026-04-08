@@ -120,6 +120,7 @@ let patternW = 0, patternH = 0;
 // Precomputed blue-noise tile (high-pass white noise) for the dots pattern.
 let blueNoiseTile = null;
 let blueNoiseTileSize = 0;
+let dotPixelSize = 1;  // edge length in screen pixels of one dot cell
 
 ///////////////////////////////////////////////////////////////////////////////
 // DOM REFERENCES
@@ -302,7 +303,8 @@ function generateBlueNoiseTile(size, seed) {
     const range = mx - mn || 1;
     // Threshold to binary so dots stay crisp; the high-pass step ensures
     // black/white pixels are distributed as blue noise rather than clumped.
-    for (let i = 0; i < N * N; i++) out[i] = (out[i] - mn) / range > 0.5 ? 1 : 0;
+    // ~40% density fuses better than 50%; less clumping for the eye to latch.
+    for (let i = 0; i < N * N; i++) out[i] = (out[i] - mn) / range > 0.6 ? 1 : 0;
     blueNoiseTile = out;
     blueNoiseTileSize = N;
 }
@@ -374,12 +376,15 @@ function startRender() {
         seedInput.value = seed;
     }
 
-    // Precompute blue-noise tile sized to one full stereogram repeat
-    // so it wraps seamlessly in pixel space.
+    // Build a blue-noise tile whose grid wraps exactly across one stereogram
+    // repeat. Texture Scale controls cells-per-repeat, so dot size scales
+    // inversely with the slider — same control semantics as other patterns.
     if (params.pattern === 'dots') {
         const repeatSize = Math.round(w / params.repeatCount);
-        const N = Math.min(256, Math.max(8, repeatSize));
-        generateBlueNoiseTile(N, seed || 1);
+        // Higher Texture Scale → bigger dots (inverse of cells-per-repeat).
+        const cells = Math.max(2, Math.min(256, Math.round(60 / params.textureWrapCount)));
+        dotPixelSize = repeatSize / cells;
+        generateBlueNoiseTile(cells, seed || 1);
     }
 
     mainCanvas.width = w;
@@ -534,10 +539,10 @@ function renderScanline(y, w, params, seed, pixels) {
         if (pattern === 'custom') {
             [r, g, b] = samplePattern(texX / repeatSize * patternW, y / repeatSize * patternW);
         } else if (pattern === 'dots') {
-            // Sample blue-noise tile directly in pixel space.
+            // Sample tile in cell space; dotPixelSize > 1 enlarges each dot.
             const N = blueNoiseTileSize;
-            const tx = ((texX | 0) % N + N) % N;
-            const ty = ((y | 0) % N + N) % N;
+            const tx = ((texX / dotPixelSize | 0) % N + N) % N;
+            const ty = ((y / dotPixelSize | 0) % N + N) % N;
             const v = blueNoiseTile[ty * N + tx] * 255 | 0;
             r = g = b = v;
         } else {
@@ -629,7 +634,7 @@ function updatePatternControls() {
     const noisy = ['gradient', 'warped', 'pixelated'].includes(patternSelect.value);
     for (const g of [hueVarGroup, satGroup, contrastGroup])
         g.classList.toggle('disabled', !noisy);
-    scaleGroup.classList.toggle('disabled', ['custom', 'dots'].includes(patternSelect.value));
+    scaleGroup.classList.toggle('disabled', patternSelect.value === 'custom');
     const seedless = ['checkerboard', 'custom'].includes(patternSelect.value);
     seedGroup.classList.toggle('disabled', seedless);
 }
