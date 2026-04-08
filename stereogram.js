@@ -134,7 +134,7 @@ const dropOverlay = document.getElementById('dropOverlay');
 
 // Offscreen canvas for image processing
 const offCanvas = document.createElement('canvas');
-const offCtx    = offCanvas.getContext('2d');
+const offCtx    = offCanvas.getContext('2d', { willReadFrequently: true });
 
 ///////////////////////////////////////////////////////////////////////////////
 // RESOLUTION & PARAMS
@@ -262,7 +262,7 @@ function loadPatternImage(image) {
     const c = document.createElement('canvas');
     c.width = patternW;
     c.height = patternH;
-    const ctx = c.getContext('2d');
+    const ctx = c.getContext('2d', { willReadFrequently: true });
     ctx.drawImage(image, 0, 0);
     patternImageData = ctx.getImageData(0, 0, patternW, patternH).data;
 }
